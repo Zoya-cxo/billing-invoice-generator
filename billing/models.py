@@ -78,8 +78,9 @@ class InvoiceItem(models.Model):
     line_total = models.DecimalField(max_digits=12, decimal_places=2)
 
     def save(self, *args, **kwargs):
-        if self.pk is not None and self.invoice.status != Invoice.STATUS_DRAFT:
-            raise ValueError('Cannot modify invoice items once invoice has left draft status')
+        if self.invoice.status != Invoice.STATUS_DRAFT:
+            raise ValueError('Cannot create or modify invoice items once invoice has left draft status')
+        self.line_total = (self.quantity * self.unit_price) - self.discount
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
