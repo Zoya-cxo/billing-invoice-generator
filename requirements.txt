@@ -1,0 +1,8 @@
+asgiref==3.12.1
+Django==5.2.17
+djangorestframework==3.18.0
+djangorestframework_simplejwt==5.5.1
+packaging==26.3
+PyJWT==2.13.0
+python-dotenv==1.2.3
+sqlparse==0.6.0
