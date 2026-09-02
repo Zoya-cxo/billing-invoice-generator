@@ -96,7 +96,20 @@ class Payment(models.Model):
     invoice = models.ForeignKey(Invoice, on_delete=models.PROTECT, related_name='payments')
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     payment_date = models.DateField()
-    method = models.CharField(max_length=50)
+    METHOD_CASH = 'cash'
+    METHOD_UPI = 'upi'
+    METHOD_BANK_TRANSFER = 'bank_transfer'
+    METHOD_CHEQUE = 'cheque'
+
+    METHOD_CHOICES = [
+        (METHOD_CASH, 'Cash'),
+        (METHOD_UPI, 'UPI'),
+        (METHOD_BANK_TRANSFER, 'Bank Transfer'),
+        (METHOD_CHEQUE, 'Cheque'),
+    ]
+
+    method = models.CharField(max_length=50, choices=METHOD_CHOICES)
+    idempotency_key = models.UUIDField(unique=True, null=True, blank=True)
 
     def save(self, *args, **kwargs):
         if self.pk is not None:

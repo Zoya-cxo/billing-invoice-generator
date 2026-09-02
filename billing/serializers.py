@@ -1,6 +1,7 @@
 import re
 
 from rest_framework import serializers
+from django.db import IntegrityError
 from .models import Customer, Product, Invoice, InvoiceItem, Payment
 
 GSTIN_REGEX = re.compile(r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$')
@@ -120,12 +121,43 @@ class InvoiceSerializer(serializers.ModelSerializer):
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
-        fields = ["id", "invoice", "amount", "payment_date", "method"]
+        fields = ["id", "invoice", "amount", "payment_date", "method", "idempotency_key"]
+        extra_kwargs = {
+            "idempotency_key": {"required": True},
+        }
 
     def validate(self, data):
         invoice = data.get("invoice")
+        amount = data.get("amount")
+        idempotency_key = data.get("idempotency_key")
+
         if invoice and invoice.status not in (Invoice.STATUS_SENT, Invoice.STATUS_OVERDUE):
             raise serializers.ValidationError(
                 "Payments can only be recorded against invoices in sent or overdue status."
             )
+
+        if amount is not None and amount <= 0:
+            raise serializers.ValidationError("Payment amount must be greater than zero.")
+
+        if invoice and amount is not None:
+            already_paid = sum(p.amount for p in invoice.payments.all())
+            outstanding = invoice.total - already_paid
+            if amount > outstanding:
+                raise serializers.ValidationError(
+                    f"Payment of {amount} exceeds outstanding balance of {outstanding}."
+                )
+
+        if idempotency_key and Payment.objects.filter(idempotency_key=idempotency_key).exists():
+            raise serializers.ValidationError(
+                "A payment with this idempotency key has already been recorded."
+            )
+
         return data
+
+    def create(self, validated_data):
+        try:
+            return super().create(validated_data)
+        except IntegrityError:
+            raise serializers.ValidationError(
+                "A payment with this idempotency key has already been recorded."
+            )

@@ -1,3 +1,177 @@
-from django.test import TestCase
+from decimal import Decimal
+from uuid import uuid4
 
-# Create your tests here.
+from django.contrib.auth import get_user_model
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from .models import Customer, Product, Invoice, InvoiceItem, Payment
+
+
+class PaymentViewSetTests(APITestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username="testadmin", password="testpass123")
+        self.client.force_authenticate(user=self.user)
+
+        self.customer = Customer.objects.create(
+            name="Test Customer",
+            email="customer@example.com",
+            phone="9999999999",
+            billing_address="123 Test Street",
+        )
+
+        self.product = Product.objects.create(
+            name="Test Product",
+            unit_price=Decimal("1000.00"),
+            default_tax_rate=Decimal("18.00"),
+            hsn_sac_code="998314",
+        )
+
+    def _build_invoice(self, invoice_number, status_value, quantity=Decimal("1")):
+        invoice = Invoice.objects.create(
+            invoice_number=invoice_number,
+            customer=self.customer,
+            issue_date="2026-01-01",
+            due_date="2026-01-31",
+        )
+        InvoiceItem.objects.create(
+            invoice=invoice,
+            product=self.product,
+            quantity=quantity,
+            unit_price=self.product.unit_price,
+            tax_rate=self.product.default_tax_rate,
+            hsn_sac_code=self.product.hsn_sac_code,
+        )
+        items = invoice.items.all()
+        subtotal = sum(item.line_total for item in items)
+        tax_total = sum((item.line_total * item.tax_rate / 100) for item in items)
+        invoice.subtotal = subtotal
+        invoice.tax_total = tax_total
+        invoice.total = subtotal + tax_total
+        invoice.save(update_fields=["subtotal", "tax_total", "total"])
+        invoice.refresh_from_db()
+
+        if status_value != Invoice.STATUS_DRAFT:
+            invoice.transition_to(Invoice.STATUS_SENT)
+        if status_value == Invoice.STATUS_OVERDUE:
+            invoice.transition_to(Invoice.STATUS_OVERDUE)
+
+        return invoice
+
+    def _payment_payload(self, invoice, amount, method=Payment.METHOD_CASH, key=None):
+        return {
+            "invoice": invoice.id,
+            "amount": str(amount),
+            "payment_date": "2026-01-15",
+            "method": method,
+            "idempotency_key": str(key or uuid4()),
+        }
+
+    def test_create_payment_against_sent_invoice_succeeds(self):
+        invoice = self._build_invoice("INV-001", Invoice.STATUS_SENT)
+        payload = self._payment_payload(invoice, Decimal("500.00"))
+        response = self.client.post("/api/v1/payments/", payload)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Payment.objects.count(), 1)
+
+    def test_create_payment_against_draft_invoice_rejected(self):
+        invoice = self._build_invoice("INV-002", Invoice.STATUS_DRAFT)
+        payload = self._payment_payload(invoice, Decimal("500.00"))
+        response = self.client.post("/api/v1/payments/", payload)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Payment.objects.count(), 0)
+
+    def test_create_payment_against_overdue_invoice_succeeds(self):
+        invoice = self._build_invoice("INV-003", Invoice.STATUS_OVERDUE)
+        payload = self._payment_payload(invoice, Decimal("500.00"))
+        response = self.client.post("/api/v1/payments/", payload)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_payment_update_returns_405(self):
+        invoice = self._build_invoice("INV-004", Invoice.STATUS_SENT)
+        payment = Payment.objects.create(
+            invoice=invoice, amount=Decimal("100.00"), payment_date="2026-01-15",
+            method=Payment.METHOD_CASH, idempotency_key=uuid4(),
+        )
+        response = self.client.patch(f"/api/v1/payments/{payment.id}/", {"amount": "200.00"})
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_payment_delete_returns_405(self):
+        invoice = self._build_invoice("INV-005", Invoice.STATUS_SENT)
+        payment = Payment.objects.create(
+            invoice=invoice, amount=Decimal("100.00"), payment_date="2026-01-15",
+            method=Payment.METHOD_CASH, idempotency_key=uuid4(),
+        )
+        response = self.client.delete(f"/api/v1/payments/{payment.id}/")
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_payment_exceeding_outstanding_balance_rejected(self):
+        invoice = self._build_invoice("INV-006", Invoice.STATUS_SENT)
+        overpay = invoice.total + Decimal("1.00")
+        payload = self._payment_payload(invoice, overpay)
+        response = self.client.post("/api/v1/payments/", payload)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Payment.objects.count(), 0)
+
+    def test_payment_exactly_matching_outstanding_balance_succeeds(self):
+        invoice = self._build_invoice("INV-007", Invoice.STATUS_SENT)
+        payload = self._payment_payload(invoice, invoice.total)
+        response = self.client.post("/api/v1/payments/", payload)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_duplicate_idempotency_key_rejected(self):
+        invoice = self._build_invoice("INV-008", Invoice.STATUS_SENT)
+        key = uuid4()
+        first = self._payment_payload(invoice, Decimal("100.00"), key=key)
+        response1 = self.client.post("/api/v1/payments/", first)
+        self.assertEqual(response1.status_code, status.HTTP_201_CREATED)
+
+        second = self._payment_payload(invoice, Decimal("50.00"), key=key)
+        response2 = self.client.post("/api/v1/payments/", second)
+        self.assertEqual(response2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Payment.objects.count(), 1)
+
+    def test_same_amount_different_idempotency_key_succeeds(self):
+        invoice = self._build_invoice("INV-009", Invoice.STATUS_SENT, quantity=Decimal("10"))
+        first = self._payment_payload(invoice, Decimal("100.00"))
+        response1 = self.client.post("/api/v1/payments/", first)
+        self.assertEqual(response1.status_code, status.HTTP_201_CREATED)
+
+        second = self._payment_payload(invoice, Decimal("100.00"))
+        response2 = self.client.post("/api/v1/payments/", second)
+        self.assertEqual(response2.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Payment.objects.count(), 2)
+
+    def test_payment_missing_idempotency_key_rejected(self):
+        invoice = self._build_invoice("INV-010", Invoice.STATUS_SENT)
+        payload = self._payment_payload(invoice, Decimal("100.00"))
+        del payload["idempotency_key"]
+        response = self.client.post("/api/v1/payments/", payload)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Payment.objects.count(), 0)
+
+    def test_payment_invalid_method_rejected(self):
+        invoice = self._build_invoice("INV-011", Invoice.STATUS_SENT)
+        payload = self._payment_payload(invoice, Decimal("100.00"), method="bitcoin")
+        response = self.client.post("/api/v1/payments/", payload)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Payment.objects.count(), 0)
+
+    def test_payment_zero_or_negative_amount_rejected(self):
+        invoice = self._build_invoice("INV-012", Invoice.STATUS_SENT)
+        for bad_amount in (Decimal("0.00"), Decimal("-50.00")):
+            with self.subTest(amount=bad_amount):
+                payload = self._payment_payload(invoice, bad_amount)
+                response = self.client.post("/api/v1/payments/", payload)
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Payment.objects.count(), 0)
+
+    def test_payment_list_returns_created_payments(self):
+        invoice = self._build_invoice("INV-013", Invoice.STATUS_SENT)
+        payload = self._payment_payload(invoice, Decimal("100.00"))
+        self.client.post("/api/v1/payments/", payload)
+
+        response = self.client.get("/api/v1/payments/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"] if "results" in response.data else response.data), 1)
