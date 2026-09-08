@@ -1,5 +1,7 @@
-from rest_framework import viewsets, mixins
+from django.db.models import ProtectedError
+from rest_framework import viewsets, mixins, status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from .models import Customer, Product, Invoice, Payment
 from .serializers import (
     CustomerSerializer,
@@ -13,6 +15,15 @@ class CustomerViewSet(viewsets.ModelViewSet):
     queryset = Customer.objects.all().order_by('name')
     serializer_class = CustomerSerializer
     permission_classes = [IsAuthenticated]
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {"detail": "Cannot delete customer with existing invoices."},
+                status=status.HTTP_409_CONFLICT,
+            )
 
 
 class ProductViewSet(viewsets.ModelViewSet):
