@@ -59,7 +59,8 @@ attribute('cust_email', 'email', pos='1,3.8!')
 attribute('cust_phone', 'phone', pos='-3.5,0.5!')
 attribute('cust_gstin', 'gstin\n(nullable)', pos='-3.5,-2!')
 attribute('cust_addr', 'billing_address', pos='-1,-3!')
-for a in ['cust_id','cust_name','cust_email','cust_phone','cust_gstin','cust_addr']:
+attribute('cust_state', 'state', pos='-5,2!')
+for a in ['cust_id','cust_name','cust_email','cust_phone','cust_gstin','cust_addr','cust_state']:
     attach('CUSTOMER', a)
 
 attribute('inv_id', 'id', pos='2.5,4!', key=True)

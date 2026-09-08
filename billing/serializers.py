@@ -10,7 +10,7 @@ GSTIN_REGEX = re.compile(r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
-        fields = ['id', 'name', 'email', 'phone', 'gstin', 'billing_address']
+        fields = ['id', 'name', 'email', 'phone', 'gstin', 'state', 'billing_address']
 
     def validate_gstin(self, value):
         if value in (None, ''):
