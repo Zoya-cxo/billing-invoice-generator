@@ -175,3 +175,35 @@ class PaymentViewSetTests(APITestCase):
         response = self.client.get("/api/v1/payments/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"] if "results" in response.data else response.data), 1)
+
+
+class CustomerViewSetDeleteTests(APITestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username="testadmin2", password="testpass123")
+        self.client.force_authenticate(user=self.user)
+
+        self.customer = Customer.objects.create(
+            name="Delete Test Customer",
+            email="deletetest@example.com",
+            phone="8888888888",
+            billing_address="456 Delete Street",
+        )
+
+    def test_delete_customer_without_invoices_succeeds(self):
+        response = self.client.delete(f"/api/v1/customers/{self.customer.id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Customer.objects.filter(id=self.customer.id).exists())
+
+    def test_delete_customer_with_invoice_returns_409(self):
+        Invoice.objects.create(
+            invoice_number="INV-DELETE-TEST-001",
+            customer=self.customer,
+            issue_date="2026-01-01",
+            due_date="2026-01-31",
+        )
+
+        response = self.client.delete(f"/api/v1/customers/{self.customer.id}/")
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn("detail", response.data)
+        self.assertTrue(Customer.objects.filter(id=self.customer.id).exists())
