@@ -1,4 +1,5 @@
 import { createContext, useContext, useState } from 'react';
+import { resetRedirectGuardOnAuth } from '../utils/authRedirectGuard';
 
 const AuthContext = createContext(null);
 
@@ -9,6 +10,7 @@ export function AuthProvider({ children }) {
   const login = (newToken, userData) => {
     setToken(newToken);
     setUser(userData);
+    resetRedirectGuardOnAuth();
   };
 
   const logout = () => {

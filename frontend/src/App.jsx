@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Placeholder } from './pages/Placeholder';
 import Login from './pages/Login';
+import CustomerList from './pages/CustomerList';
 
 function App() {
   return (
@@ -10,6 +11,14 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route
+            path="/customers"
+            element={
+              <ProtectedRoute>
+                <CustomerList />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/dashboard"
             element={
