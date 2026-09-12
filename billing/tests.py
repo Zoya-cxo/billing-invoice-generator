@@ -254,3 +254,49 @@ class ProductViewSetDeleteTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
         self.assertIn("detail", response.data)
         self.assertTrue(Product.objects.filter(id=self.product.id).exists())
+
+
+class ProductValidationTests(APITestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username="testadmin4", password="testpass123")
+        self.client.force_authenticate(user=self.user)
+
+    def test_negative_unit_price_rejected(self):
+        response = self.client.post("/api/v1/products/", {
+            "name": "Bad Price Product",
+            "unit_price": "-5.00",
+            "default_tax_rate": "18.00",
+            "hsn_sac_code": "998316",
+        })
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("unit_price", response.data)
+
+    def test_zero_unit_price_rejected(self):
+        response = self.client.post("/api/v1/products/", {
+            "name": "Zero Price Product",
+            "unit_price": "0.00",
+            "default_tax_rate": "18.00",
+            "hsn_sac_code": "998316",
+        })
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("unit_price", response.data)
+
+    def test_negative_tax_rate_rejected(self):
+        response = self.client.post("/api/v1/products/", {
+            "name": "Bad Tax Product",
+            "unit_price": "100.00",
+            "default_tax_rate": "-1.00",
+            "hsn_sac_code": "998316",
+        })
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("default_tax_rate", response.data)
+
+    def test_zero_tax_rate_accepted(self):
+        response = self.client.post("/api/v1/products/", {
+            "name": "Exempt Product",
+            "unit_price": "100.00",
+            "default_tax_rate": "0.00",
+            "hsn_sac_code": "998316",
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)

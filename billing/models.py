@@ -1,3 +1,5 @@
+from decimal import Decimal
+from django.core.validators import MinValueValidator
 from django.db import models
 
 
@@ -56,8 +58,14 @@ class Customer(models.Model):
 
 class Product(models.Model):
     name = models.CharField(max_length=255)
-    unit_price = models.DecimalField(max_digits=12, decimal_places=2)
-    default_tax_rate = models.DecimalField(max_digits=5, decimal_places=2)
+    unit_price = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+    )
+    default_tax_rate = models.DecimalField(
+        max_digits=5, decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+    )
     hsn_sac_code = models.CharField(max_length=20)
 
     def __str__(self):
