@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuthFetch } from '../hooks/useAuthFetch';
 import { API_BASE_URL } from '../config';
 
@@ -33,14 +34,17 @@ export default function CustomerList() {
   return (
     <div>
       <h1>Customers</h1>
+      <Link to="/customers/new">New Customer</Link>
       {loading && <p>Loading...</p>}
       {error && <p>{error}</p>}
       <ul>
         {customers.map((c) => (
-          <li key={c.id}>{c.name}</li>
+          <li key={c.id}>
+            {c.name}{' '}
+            <Link to={`/customers/${c.id}/edit`}>Edit</Link>
+          </li>
         ))}
       </ul>
-
     </div>
   );
 }

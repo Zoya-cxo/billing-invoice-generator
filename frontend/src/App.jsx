@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { Placeholder } from './pages/Placeholder';
 import Login from './pages/Login';
 import CustomerList from './pages/CustomerList';
+import CustomerForm from './pages/CustomerForm';
 
 function App() {
   return (
@@ -16,6 +17,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <CustomerList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/customers/new"
+            element={
+              <ProtectedRoute>
+                <CustomerForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/customers/:id/edit"
+            element={
+              <ProtectedRoute>
+                <CustomerForm />
               </ProtectedRoute>
             }
           />
