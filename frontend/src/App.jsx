@@ -5,6 +5,8 @@ import { Placeholder } from './pages/Placeholder';
 import Login from './pages/Login';
 import CustomerList from './pages/CustomerList';
 import CustomerForm from './pages/CustomerForm';
+import ProductList from './pages/ProductList';
+import ProductForm from './pages/ProductForm';
 
 function App() {
   return (
@@ -33,6 +35,30 @@ function App() {
             element={
               <ProtectedRoute>
                 <CustomerForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/products"
+            element={
+              <ProtectedRoute>
+                <ProductList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/products/new"
+            element={
+              <ProtectedRoute>
+                <ProductForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/products/:id/edit"
+            element={
+              <ProtectedRoute>
+                <ProductForm />
               </ProtectedRoute>
             }
           />
