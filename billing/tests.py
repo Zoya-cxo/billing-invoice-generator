@@ -207,3 +207,50 @@ class CustomerViewSetDeleteTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
         self.assertIn("detail", response.data)
         self.assertTrue(Customer.objects.filter(id=self.customer.id).exists())
+
+
+class ProductViewSetDeleteTests(APITestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username="testadmin3", password="testpass123")
+        self.client.force_authenticate(user=self.user)
+
+        self.customer = Customer.objects.create(
+            name="Product Delete Test Customer",
+            email="productdeletetest@example.com",
+            phone="7777777777",
+            billing_address="789 Delete Street",
+        )
+
+        self.product = Product.objects.create(
+            name="Product Delete Test Product",
+            unit_price=Decimal("500.00"),
+            default_tax_rate=Decimal("18.00"),
+            hsn_sac_code="998315",
+        )
+
+    def test_delete_product_without_invoice_items_succeeds(self):
+        response = self.client.delete(f"/api/v1/products/{self.product.id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Product.objects.filter(id=self.product.id).exists())
+
+    def test_delete_product_with_invoice_item_returns_409(self):
+        invoice = Invoice.objects.create(
+            invoice_number="INV-PRODUCT-DELETE-TEST-001",
+            customer=self.customer,
+            issue_date="2026-01-01",
+            due_date="2026-01-31",
+        )
+        InvoiceItem.objects.create(
+            invoice=invoice,
+            product=self.product,
+            quantity=Decimal("1"),
+            unit_price=self.product.unit_price,
+            tax_rate=self.product.default_tax_rate,
+            hsn_sac_code=self.product.hsn_sac_code,
+        )
+
+        response = self.client.delete(f"/api/v1/products/{self.product.id}/")
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn("detail", response.data)
+        self.assertTrue(Product.objects.filter(id=self.product.id).exists())
