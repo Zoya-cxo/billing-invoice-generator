@@ -56,6 +56,22 @@ class Customer(models.Model):
         return self.name
 
 
+class Company(models.Model):
+    """Singleton seller/company profile. Single-admin app, no multi-tenant,
+    so there is intentionally no FK from Invoice to Company - Invoice snapshots
+    the relevant fields at creation time instead (see seller_* fields on Invoice).
+    This mirrors the InvoiceItem/Product snapshot pattern: editing Company after
+    an invoice exists must never change that invoice's already-filed GST details.
+    """
+    name = models.CharField(max_length=255)
+    gstin = models.CharField(max_length=15)
+    state = models.CharField(max_length=2, choices=GST_STATE_CHOICES)
+    registered_address = models.TextField()
+
+    def __str__(self):
+        return self.name
+
+
 class Product(models.Model):
     name = models.CharField(max_length=255)
     unit_price = models.DecimalField(
@@ -96,8 +112,20 @@ class Invoice(models.Model):
     }
 
     invoice_number = models.CharField(max_length=50, unique=True)
+    # NOTE: customer is a live FK, not snapshotted, unlike seller_* below and unlike
+    # InvoiceItem's snapshot of Product. If Customer.billing_address (or other fields)
+    # is edited after this invoice exists, the invoice will display today's customer
+    # data, not what was true at billing time. Same bug shape as the Company/seller
+    # snapshot problem this file solves for - just not yet fixed on the customer side.
+    # Deliberately deferred (out of scope for this step), but flagging now because by
+    # the time PDF export is built, fixing this means a migration + backfilling old
+    # invoices, not just adding a field. Revisit before/during PDF export work.
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='invoices')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    seller_name = models.CharField(max_length=255)
+    seller_gstin = models.CharField(max_length=15)
+    seller_state = models.CharField(max_length=2, choices=GST_STATE_CHOICES)
+    seller_address = models.TextField()
     issue_date = models.DateField()
     due_date = models.DateField()
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)

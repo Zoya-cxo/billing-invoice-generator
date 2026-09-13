@@ -34,6 +34,10 @@ class PaymentViewSetTests(APITestCase):
             customer=self.customer,
             issue_date="2026-01-01",
             due_date="2026-01-31",
+            seller_name="Test Seller Pvt Ltd",
+            seller_gstin="27AAAPL1234C1Z5",
+            seller_state="27",
+            seller_address="Test Seller Address, Pune",
         )
         InvoiceItem.objects.create(
             invoice=invoice,
@@ -201,6 +205,10 @@ class CustomerViewSetDeleteTests(APITestCase):
             customer=self.customer,
             issue_date="2026-01-01",
             due_date="2026-01-31",
+            seller_name="Test Seller Pvt Ltd",
+            seller_gstin="27AAAPL1234C1Z5",
+            seller_state="27",
+            seller_address="Test Seller Address, Pune",
         )
 
         response = self.client.delete(f"/api/v1/customers/{self.customer.id}/")
@@ -240,6 +248,10 @@ class ProductViewSetDeleteTests(APITestCase):
             customer=self.customer,
             issue_date="2026-01-01",
             due_date="2026-01-31",
+            seller_name="Test Seller Pvt Ltd",
+            seller_gstin="27AAAPL1234C1Z5",
+            seller_state="27",
+            seller_address="Test Seller Address, Pune",
         )
         InvoiceItem.objects.create(
             invoice=invoice,
