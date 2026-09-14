@@ -1,6 +1,7 @@
 from decimal import Decimal
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.core.exceptions import ImproperlyConfigured
 
 
 GST_STATE_CHOICES = [
@@ -70,6 +71,29 @@ class Company(models.Model):
 
     class Meta:
         verbose_name_plural = 'Companies'
+
+    _SAVE_ERROR = 'A Company row already exists — only one is allowed. Edit the existing row instead of creating a new one.'
+    _GET_ZERO_ERROR = 'No Company row exists — seed one via Django admin before creating invoices.'
+    _GET_MULTI_ERROR = (
+        'Multiple Company rows exist. This indicates direct database manipulation '
+        '(bulk_create, raw SQL, fixtures, or manual edits) — the save() guard blocks '
+        'this through normal app use. Resolve by deleting the extra row(s) before '
+        'creating invoices.'
+    )
+
+    def save(self, *args, **kwargs):
+        if self.pk is None and Company.objects.exists():
+            raise ValueError(self._SAVE_ERROR)
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_singleton(cls):
+        count = cls.objects.count()
+        if count == 0:
+            raise ImproperlyConfigured(cls._GET_ZERO_ERROR)
+        if count > 1:
+            raise ImproperlyConfigured(cls._GET_MULTI_ERROR)
+        return cls.objects.get()
 
     def __str__(self):
         return self.name
