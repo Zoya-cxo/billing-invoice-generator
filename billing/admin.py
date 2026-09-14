@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Customer, Product, Invoice, InvoiceItem, Payment
+from .models import Customer, Product, Invoice, InvoiceItem, Payment, Company
 
 
 class InvoiceItemInline(admin.TabularInline):
@@ -31,3 +31,7 @@ class InvoiceAdmin(admin.ModelAdmin):
 class PaymentAdmin(admin.ModelAdmin):
     list_display = ('invoice', 'amount', 'payment_date', 'method')
     search_fields = ('invoice__invoice_number',)
+
+@admin.register(Company)
+class CompanyAdmin(admin.ModelAdmin):
+    list_display = ('name', 'gstin', 'state')

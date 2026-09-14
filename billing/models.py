@@ -68,6 +68,9 @@ class Company(models.Model):
     state = models.CharField(max_length=2, choices=GST_STATE_CHOICES)
     registered_address = models.TextField()
 
+    class Meta:
+        verbose_name_plural = 'Companies'
+
     def __str__(self):
         return self.name
 
