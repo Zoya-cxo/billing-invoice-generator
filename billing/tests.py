@@ -1,11 +1,14 @@
 from decimal import Decimal
+from unittest import mock
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import Customer, Product, Invoice, InvoiceItem, Payment
+from .models import Customer, Product, Invoice, InvoiceItem, Payment, Company
+from .serializers import InvoiceSerializer
 
 
 class PaymentViewSetTests(APITestCase):
@@ -312,3 +315,91 @@ class ProductValidationTests(APITestCase):
             "hsn_sac_code": "998316",
         })
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+
+class InvoiceSerializerBugFixTests(APITestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username="testadmin2", password="testpass123")
+        self.client.force_authenticate(user=self.user)
+
+        self.company = Company.objects.create(
+            name="Test Seller Pvt Ltd",
+            gstin="27AAAPL1234C1Z5",
+            state="27",
+            registered_address="Test Seller Address, Pune",
+        )
+        self.customer = Customer.objects.create(
+            name="Test Customer 2",
+            email="customer2@example.com",
+            phone="9999999998",
+            billing_address="456 Test Street",
+        )
+        self.product_a = Product.objects.create(
+            name="Product A",
+            unit_price=Decimal("10.05"),
+            default_tax_rate=Decimal("9.00"),
+            hsn_sac_code="998314",
+        )
+        self.product_b = Product.objects.create(
+            name="Product B",
+            unit_price=Decimal("10.15"),
+            default_tax_rate=Decimal("9.00"),
+            hsn_sac_code="998315",
+        )
+
+    def test_per_line_rounding_diverges_from_aggregate_rounding(self):
+        data = {
+            "invoice_number": "INV-ROUND-001",
+            "customer": self.customer.id,
+            "issue_date": "2026-01-01",
+            "due_date": "2026-01-31",
+            "items": [
+                {"product": self.product_a.id, "quantity": "1.00", "discount": "0"},
+                {"product": self.product_b.id, "quantity": "1.00", "discount": "0"},
+            ],
+        }
+        serializer = InvoiceSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        invoice = serializer.save()
+
+        # Per-line-then-sum (the fix): round(0.9045)=0.90, round(0.9135)=0.91 -> 1.81
+        # Aggregate-then-round (the bug this fix replaced): 0.9045+0.9135=1.818 -> 1.82
+        self.assertEqual(invoice.tax_total, Decimal("1.81"))
+
+    def test_create_rolls_back_partial_invoice_on_mid_creation_failure(self):
+        data = {
+            "invoice_number": "INV-ROLLBACK-001",
+            "customer": self.customer.id,
+            "issue_date": "2026-01-01",
+            "due_date": "2026-01-31",
+            "items": [
+                {"product": self.product_a.id, "quantity": "1.00", "discount": "0"},
+                {"product": self.product_b.id, "quantity": "1.00", "discount": "0"},
+            ],
+        }
+        serializer = InvoiceSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+
+        real_create = InvoiceItem.objects.create
+        call_count = {"n": 0}
+
+        def flaky_create(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 2:
+                raise IntegrityError("simulated mid-creation failure")
+            return real_create(*args, **kwargs)
+
+        # First call goes through to the real manager method (a genuine committed
+        # row), second call raises - this only proves atomic() works if there was
+        # something real for it to undo.
+        with mock.patch.object(InvoiceItem.objects, "create", side_effect=flaky_create):
+            with self.assertRaises(IntegrityError):
+                serializer.save()
+
+        self.assertFalse(
+            Invoice.objects.filter(invoice_number="INV-ROLLBACK-001").exists()
+        )
+        self.assertFalse(
+            InvoiceItem.objects.filter(product=self.product_a).exists()
+        )

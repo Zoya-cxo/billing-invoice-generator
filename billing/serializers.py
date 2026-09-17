@@ -1,8 +1,14 @@
+import logging
 import re
+from decimal import Decimal, ROUND_HALF_UP
 
 from rest_framework import serializers
-from django.db import IntegrityError
-from .models import Customer, Product, Invoice, InvoiceItem, Payment
+from rest_framework.exceptions import APIException
+from django.core.exceptions import ImproperlyConfigured
+from django.db import IntegrityError, transaction
+from .models import Customer, Product, Invoice, InvoiceItem, Payment, Company
+
+logger = logging.getLogger(__name__)
 
 GSTIN_REGEX = re.compile(r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$')
 
@@ -46,6 +52,15 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
 
 class InvoiceSerializer(serializers.ModelSerializer):
     items = InvoiceItemSerializer(many=True)
+    subtotal = serializers.DecimalField(
+        max_digits=12, decimal_places=2, rounding=ROUND_HALF_UP, read_only=True
+    )
+    tax_total = serializers.DecimalField(
+        max_digits=12, decimal_places=2, rounding=ROUND_HALF_UP, read_only=True
+    )
+    total = serializers.DecimalField(
+        max_digits=12, decimal_places=2, rounding=ROUND_HALF_UP, read_only=True
+    )
 
     class Meta:
         model = Invoice
@@ -53,7 +68,11 @@ class InvoiceSerializer(serializers.ModelSerializer):
             "id", "invoice_number", "customer", "status", "issue_date", "due_date",
             "subtotal", "tax_total", "total", "irn", "qr_code", "items",
         ]
-        read_only_fields = ["subtotal", "tax_total", "total", "irn", "qr_code"]
+        # subtotal/tax_total/total are explicitly declared above (with rounding=),
+        # so listing them here too has no effect - DRF only applies
+        # Meta.read_only_fields to auto-generated fields. Left off to avoid
+        # implying they do something they don't.
+        read_only_fields = ["irn", "qr_code"]
 
     def validate_items(self, value):
         if not value:
@@ -62,9 +81,32 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         items_data = validated_data.pop("items")
-        invoice = Invoice.objects.create(**validated_data)
-        self._create_items(invoice, items_data)
-        self._recalculate_totals(invoice)
+
+        # Snapshot seller/company details onto the invoice at creation time -
+        # never left to the model's silent '' default, and never a live FK.
+        try:
+            company = Company.get_singleton()
+        except ImproperlyConfigured as e:
+            # Not the client's fault - this is a server-side data problem
+            # (no Company row, or more than one). Log the specific message
+            # (get_singleton() already distinguishes zero-row vs multi-row)
+            # so whoever's looking at a 500 in the logs sees exactly which
+            # invariant broke, not a bare "ImproperlyConfigured" with no context.
+            logger.error("Invoice creation blocked - Company singleton invalid: %s", e)
+            raise APIException(
+                "Invoice creation is unavailable: seller company data is "
+                "missing or invalid. Contact the administrator."
+            )
+
+        validated_data["seller_name"] = company.name
+        validated_data["seller_gstin"] = company.gstin
+        validated_data["seller_state"] = company.state
+        validated_data["seller_address"] = company.registered_address
+
+        with transaction.atomic():
+            invoice = Invoice.objects.create(**validated_data)
+            self._create_items(invoice, items_data)
+            self._recalculate_totals(invoice)
         return invoice
 
     def update(self, instance, validated_data):
@@ -76,20 +118,27 @@ class InvoiceSerializer(serializers.ModelSerializer):
                 "Cannot modify items on an invoice that is not in draft status."
             )
 
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
+        # Wrapped in full, not just the items branch: attribute updates,
+        # the status transition, and the items delete-then-recreate are one
+        # unit of work. Splitting the wrap would just move the same
+        # partial-write risk one level up (e.g. attributes saved, then
+        # transition_to() fails, items never touched but instance is already
+        # half-updated).
+        with transaction.atomic():
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            instance.save()
 
-        if new_status is not None and new_status != instance.status:
-            try:
-                instance.transition_to(new_status)
-            except ValueError as e:
-                raise serializers.ValidationError(str(e))
+            if new_status is not None and new_status != instance.status:
+                try:
+                    instance.transition_to(new_status)
+                except ValueError as e:
+                    raise serializers.ValidationError(str(e))
 
-        if items_data is not None:
-            instance.items.all().delete()
-            self._create_items(instance, items_data)
-            self._recalculate_totals(instance)
+            if items_data is not None:
+                instance.items.all().delete()
+                self._create_items(instance, items_data)
+                self._recalculate_totals(instance)
 
         return instance
 
@@ -108,10 +157,14 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
     def _recalculate_totals(self, invoice):
         items = invoice.items.all()
-        subtotal = sum(item.line_total for item in items)
-        tax_total = sum(
-            (item.line_total * item.tax_rate / 100) for item in items
-        )
+        subtotal = Decimal('0.00')
+        tax_total = Decimal('0.00')
+        for item in items:
+            subtotal += item.line_total
+            line_tax = (item.line_total * item.tax_rate / 100).quantize(
+                Decimal('0.01'), rounding=ROUND_HALF_UP
+            )
+            tax_total += line_tax
         invoice.subtotal = subtotal
         invoice.tax_total = tax_total
         invoice.total = subtotal + tax_total
