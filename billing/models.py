@@ -99,6 +99,42 @@ class Company(models.Model):
         return self.name
 
 
+class InvoiceNumberCounter(models.Model):
+    """Singleton row holding the last-issued invoice sequence number.
+    Monotonically increasing, never reused - Rule 46(b) requires GST
+    invoice numbers to be unique within a financial year, not reset each
+    year, so a lifetime counter already satisfies that (deliberate call,
+    documented in README - no FY reset implemented).
+
+    Must only be called from inside an existing transaction.atomic()
+    block: on backends that support transactions (including Postgres),
+    Django raises TransactionManagementError if select_for_update() is
+    evaluated outside one, so misuse fails loudly instead of silently
+    reintroducing the race.
+    """
+    last_number = models.PositiveIntegerField(default=0)
+
+    _MISSING_ERROR = (
+        "InvoiceNumberCounter row (pk=1) is missing. It is seeded by migration "
+        "0009. Recreate it with pk=1 and last_number set to the highest issued "
+        "invoice sequence number, never 0, or new invoices will collide with "
+        "existing numbers."
+    )
+
+    @classmethod
+    def get_next_number(cls):
+        try:
+            counter = cls.objects.select_for_update().get(pk=1)
+        except cls.DoesNotExist:
+            raise ImproperlyConfigured(cls._MISSING_ERROR)
+        counter.last_number += 1
+        counter.save(update_fields=['last_number'])
+        return f"INV-{counter.last_number:06d}"
+
+    def __str__(self):
+        return f"Counter: last issued INV-{self.last_number:06d}"
+
+
 class Product(models.Model):
     name = models.CharField(max_length=255)
     unit_price = models.DecimalField(
@@ -225,4 +261,4 @@ class Payment(models.Model):
         raise ValueError('Payment records are immutable and cannot be deleted')
 
     def __str__(self):
-        return f'{self.amount} for {self.invoice.invoice_number}'
+        return f'{self.amount} for {self.invoice.invoice_number}' 

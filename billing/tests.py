@@ -1,13 +1,20 @@
+import threading
+import time
 from decimal import Decimal
 from unittest import mock
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError
+from django.db import IntegrityError, connections, transaction
+from django.test import TransactionTestCase
 from rest_framework import status
+from rest_framework.exceptions import APIException
 from rest_framework.test import APITestCase
 
-from .models import Customer, Product, Invoice, InvoiceItem, Payment, Company
+from .models import (
+    Customer, Product, Invoice, InvoiceItem, Payment, Company,
+    InvoiceNumberCounter,
+)
 from .serializers import InvoiceSerializer
 
 
@@ -350,7 +357,6 @@ class InvoiceSerializerBugFixTests(APITestCase):
 
     def test_per_line_rounding_diverges_from_aggregate_rounding(self):
         data = {
-            "invoice_number": "INV-ROUND-001",
             "customer": self.customer.id,
             "issue_date": "2026-01-01",
             "due_date": "2026-01-31",
@@ -369,7 +375,6 @@ class InvoiceSerializerBugFixTests(APITestCase):
 
     def test_create_rolls_back_partial_invoice_on_mid_creation_failure(self):
         data = {
-            "invoice_number": "INV-ROLLBACK-001",
             "customer": self.customer.id,
             "issue_date": "2026-01-01",
             "due_date": "2026-01-31",
@@ -380,6 +385,9 @@ class InvoiceSerializerBugFixTests(APITestCase):
         }
         serializer = InvoiceSerializer(data=data)
         serializer.is_valid(raise_exception=True)
+
+        invoice_count_before = Invoice.objects.count()
+        counter_before = InvoiceNumberCounter.objects.get(pk=1).last_number
 
         real_create = InvoiceItem.objects.create
         call_count = {"n": 0}
@@ -397,9 +405,96 @@ class InvoiceSerializerBugFixTests(APITestCase):
             with self.assertRaises(IntegrityError):
                 serializer.save()
 
-        self.assertFalse(
-            Invoice.objects.filter(invoice_number="INV-ROLLBACK-001").exists()
+        self.assertEqual(Invoice.objects.count(), invoice_count_before)
+        self.assertEqual(
+            InvoiceNumberCounter.objects.get(pk=1).last_number, counter_before
         )
         self.assertFalse(
             InvoiceItem.objects.filter(product=self.product_a).exists()
+        )
+
+    def _create_invoice_payload(self):
+        return {
+            "customer": self.customer.id,
+            "issue_date": "2026-01-01",
+            "due_date": "2026-01-31",
+            "items": [
+                {"product": self.product_a.id, "quantity": "1.00", "discount": "0"},
+            ],
+        }
+
+    def test_sequential_creates_get_sequential_numbers(self):
+        start = InvoiceNumberCounter.objects.get(pk=1).last_number
+        numbers = []
+        for _ in range(2):
+            serializer = InvoiceSerializer(data=self._create_invoice_payload())
+            serializer.is_valid(raise_exception=True)
+            numbers.append(serializer.save().invoice_number)
+        self.assertEqual(numbers, [f"INV-{start + 1:06d}", f"INV-{start + 2:06d}"])
+
+    def test_client_supplied_invoice_number_is_ignored(self):
+        start = InvoiceNumberCounter.objects.get(pk=1).last_number
+        payload = self._create_invoice_payload()
+        payload["invoice_number"] = "INV-CLIENT-CHOSEN"
+        serializer = InvoiceSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        invoice = serializer.save()
+        self.assertEqual(invoice.invoice_number, f"INV-{start + 1:06d}")
+
+    def test_missing_counter_row_logs_and_raises_api_exception(self):
+        InvoiceNumberCounter.objects.all().delete()
+        invoice_count_before = Invoice.objects.count()
+        serializer = InvoiceSerializer(data=self._create_invoice_payload())
+        serializer.is_valid(raise_exception=True)
+
+        with self.assertLogs("billing.serializers", level="ERROR") as logs:
+            with self.assertRaises(APIException):
+                serializer.save()
+
+        self.assertIn("InvoiceNumberCounter", logs.output[0])
+        self.assertEqual(Invoice.objects.count(), invoice_count_before)
+
+
+class InvoiceNumberCounterConcurrencyTests(TransactionTestCase):
+    THREADS = 8
+
+    def setUp(self):
+        InvoiceNumberCounter.objects.update_or_create(pk=1, defaults={"last_number": 0})
+
+    def test_concurrent_get_next_number_returns_distinct_numbers(self):
+        barrier = threading.Barrier(self.THREADS)
+        results_lock = threading.Lock()
+        numbers = []
+        errors = []
+        real_save = InvoiceNumberCounter.save
+
+        def slow_save(instance, *args, **kwargs):
+            time.sleep(0.05)
+            return real_save(instance, *args, **kwargs)
+
+        def worker():
+            try:
+                barrier.wait(timeout=10)
+                with transaction.atomic():
+                    number = InvoiceNumberCounter.get_next_number()
+                with results_lock:
+                    numbers.append(number)
+            except Exception as exc:
+                with results_lock:
+                    errors.append(exc)
+            finally:
+                connections.close_all()
+
+        with mock.patch.object(InvoiceNumberCounter, "save", slow_save):
+            threads = [threading.Thread(target=worker) for _ in range(self.THREADS)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=30)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(len(numbers), self.THREADS)
+        self.assertEqual(len(set(numbers)), self.THREADS)
+        self.assertEqual(
+            InvoiceNumberCounter.objects.get(pk=1).last_number, self.THREADS
         )

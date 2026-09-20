@@ -39,6 +39,7 @@ entity('INVOICEITEM', 'InvoiceItem', pos='12,0!')
 entity('PRODUCT', 'Product', pos='18,2.5!')
 entity('PAYMENT', 'Payment', pos='6,-6!')
 entity('COMPANY', 'Company', pos='9,7.5!')
+entity('COUNTER', 'InvoiceNumber\nCounter', pos='1,-5.5!')
 
 relationship('PLACES', 'Places', pos='3,0!')
 relationship('CONTAINS', 'Contains', pos='9,0!')
@@ -56,6 +57,9 @@ link('RECEIVES', 'PAYMENT', '', 'N')
 
 g.edge('COMPANY', 'INVOICE', style='dashed', color=EDGE_COLOR, penwidth='1.2',
        label='snapshot source\n(no FK)', fontsize='10', fontname='Helvetica')
+
+g.edge('COUNTER', 'INVOICE', style='dashed', color=EDGE_COLOR, penwidth='1.2',
+       label='assigns invoice_number\n(no FK)', fontsize='10', fontname='Helvetica')
 
 attribute('cust_id', 'id', pos='-3,3!', key=True)
 attribute('cust_name', 'name', pos='-1,3.5!')
@@ -76,7 +80,7 @@ attribute('inv_subtotal', 'subtotal', pos='3,2.5!', derived=True)
 attribute('inv_taxtotal', 'tax_total', pos='9.5,2.3!', derived=True)
 attribute('inv_total', 'total', pos='6.5,3.2!', derived=True)
 attribute('inv_irn', 'irn (nullable)', pos='9,1.7!')
-attribute('inv_qr', 'qr_code (nullable)', pos='4.5,-1.8!')
+attribute('inv_qr', 'qr_code (nullable)', pos='3.0,-1.2!')
 attribute('inv_seller_name', 'seller_name\n(snapshot)', pos='2.5,6!')
 attribute('inv_seller_gstin', 'seller_gstin\n(snapshot)', pos='4.5,6.8!')
 attribute('inv_seller_state', 'seller_state\n(snapshot)', pos='7,6.5!')
@@ -102,9 +106,6 @@ attribute('prod_hsn', 'hsn_sac_code', pos='19,0!')
 for a in ['prod_id','prod_name','prod_price','prod_tax','prod_hsn']:
     attach('PRODUCT', a)
 
-for a in ['prod_id','prod_name','prod_price','prod_tax','prod_hsn']:
-    attach('PRODUCT', a)
-
 attribute('comp_id', 'id', pos='5.5,8!', key=True)
 attribute('comp_name', 'name', pos='8,9!')
 attribute('comp_gstin', 'gstin', pos='11,9!')
@@ -113,11 +114,17 @@ attribute('comp_addr', 'registered_address', pos='9,10!')
 for a in ['comp_id','comp_name','comp_gstin','comp_state','comp_addr']:
     attach('COMPANY', a)
 
+attribute('ctr_id', 'id', pos='-1.3,-6!', key=True)
+attribute('ctr_last', 'last_number', pos='0.8,-7.6!')
+for a in ['ctr_id','ctr_last']:
+    attach('COUNTER', a)
+
 attribute('pay_id', 'id', pos='3,-7!', key=True)
 attribute('pay_amount', 'amount', pos='5,-8.5!')
 attribute('pay_date', 'payment_date', pos='7.5,-9!')
 attribute('pay_method', 'method\n(enum: cash/upi/\nbank_transfer/cheque)', pos='9.5,-8!')
-for a in ['pay_id','pay_amount','pay_date','pay_method']:
+attribute('pay_idem', 'idempotency_key\n(unique)', pos='8,-4.8!')
+for a in ['pay_id','pay_amount','pay_date','pay_method','pay_idem']:
     attach('PAYMENT', a)
 
 g.node('legend', shape='box', style='filled', fillcolor='white', color='#7a92a3',

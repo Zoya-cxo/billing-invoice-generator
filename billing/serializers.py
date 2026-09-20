@@ -6,7 +6,10 @@ from rest_framework import serializers
 from rest_framework.exceptions import APIException
 from django.core.exceptions import ImproperlyConfigured
 from django.db import IntegrityError, transaction
-from .models import Customer, Product, Invoice, InvoiceItem, Payment, Company
+from .models import (
+    Customer, Product, Invoice, InvoiceItem, Payment, Company,
+    InvoiceNumberCounter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +75,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
         # so listing them here too has no effect - DRF only applies
         # Meta.read_only_fields to auto-generated fields. Left off to avoid
         # implying they do something they don't.
-        read_only_fields = ["irn", "qr_code"]
+        read_only_fields = ["invoice_number", "irn", "qr_code"]
 
     def validate_items(self, value):
         if not value:
@@ -104,6 +107,14 @@ class InvoiceSerializer(serializers.ModelSerializer):
         validated_data["seller_address"] = company.registered_address
 
         with transaction.atomic():
+            try:
+                validated_data["invoice_number"] = InvoiceNumberCounter.get_next_number()
+            except ImproperlyConfigured as e:
+                logger.error("Invoice creation blocked - InvoiceNumberCounter invalid: %s", e)
+                raise APIException(
+                    "Invoice creation is unavailable: invoice numbering is not "
+                    "configured. Contact the administrator."
+                )
             invoice = Invoice.objects.create(**validated_data)
             self._create_items(invoice, items_data)
             self._recalculate_totals(invoice)
