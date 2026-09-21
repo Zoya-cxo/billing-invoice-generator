@@ -454,6 +454,28 @@ class InvoiceSerializerBugFixTests(APITestCase):
         self.assertIn("InvoiceNumberCounter", logs.output[0])
         self.assertEqual(Invoice.objects.count(), invoice_count_before)
 
+    def test_create_rejects_non_draft_status_with_400(self):
+        for status_value in ["sent", "paid", "overdue", "cancelled"]:
+            with self.subTest(status=status_value):
+                invoice_count_before = Invoice.objects.count()
+                counter_before = InvoiceNumberCounter.objects.get(pk=1).last_number
+                payload = self._create_invoice_payload()
+                payload["status"] = status_value
+                response = self.client.post("/api/v1/invoices/", payload, format="json")
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("status", response.data)
+                self.assertEqual(Invoice.objects.count(), invoice_count_before)
+                self.assertEqual(
+                    InvoiceNumberCounter.objects.get(pk=1).last_number, counter_before
+                )
+
+    def test_create_accepts_explicit_draft_status(self):
+        payload = self._create_invoice_payload()
+        payload["status"] = "draft"
+        response = self.client.post("/api/v1/invoices/", payload, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], "draft")
+
 
 class InvoiceNumberCounterConcurrencyTests(TransactionTestCase):
     THREADS = 8

@@ -83,6 +83,10 @@ class InvoiceSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
+        if validated_data.get("status", Invoice.STATUS_DRAFT) != Invoice.STATUS_DRAFT:
+            raise serializers.ValidationError(
+                {"status": "New invoices are always created in draft status."}
+            )
         items_data = validated_data.pop("items")
 
         # Snapshot seller/company details onto the invoice at creation time -
