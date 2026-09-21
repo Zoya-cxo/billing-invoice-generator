@@ -93,6 +93,15 @@ class InvoiceSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("An invoice must have at least one item.")
         return value
 
+    def validate(self, attrs):
+        issue_date = attrs.get("issue_date", getattr(self.instance, "issue_date", None))
+        due_date = attrs.get("due_date", getattr(self.instance, "due_date", None))
+        if issue_date is not None and due_date is not None and due_date < issue_date:
+            raise serializers.ValidationError(
+                {"due_date": "Due date cannot be before the issue date."}
+            )
+        return attrs
+
     def create(self, validated_data):
         if validated_data.get("status", Invoice.STATUS_DRAFT) != Invoice.STATUS_DRAFT:
             raise serializers.ValidationError(

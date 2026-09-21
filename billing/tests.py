@@ -524,6 +524,33 @@ class InvoiceSerializerBugFixTests(APITestCase):
                 response = self.client.post("/api/v1/invoices/", payload, format="json")
                 self.assertEqual(response.status_code, 201)
 
+    def test_create_rejects_due_date_before_issue_date(self):
+        cases = [("2026-01-01", "2025-12-31"), ("2026-01-02", "2026-01-01")]
+        for issue_date, due_date in cases:
+            with self.subTest(issue_date=issue_date, due_date=due_date):
+                invoice_count_before = Invoice.objects.count()
+                counter_before = InvoiceNumberCounter.objects.get(pk=1).last_number
+                payload = self._create_invoice_payload()
+                payload["issue_date"] = issue_date
+                payload["due_date"] = due_date
+                response = self.client.post("/api/v1/invoices/", payload, format="json")
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("due_date", response.data)
+                self.assertEqual(Invoice.objects.count(), invoice_count_before)
+                self.assertEqual(
+                    InvoiceNumberCounter.objects.get(pk=1).last_number, counter_before
+                )
+
+    def test_create_accepts_due_date_on_or_after_issue_date(self):
+        cases = [("2026-01-15", "2026-01-15"), ("2026-01-15", "2026-02-14")]
+        for issue_date, due_date in cases:
+            with self.subTest(issue_date=issue_date, due_date=due_date):
+                payload = self._create_invoice_payload()
+                payload["issue_date"] = issue_date
+                payload["due_date"] = due_date
+                response = self.client.post("/api/v1/invoices/", payload, format="json")
+                self.assertEqual(response.status_code, 201)
+
 
 class InvoiceNumberCounterConcurrencyTests(TransactionTestCase):
     THREADS = 8
