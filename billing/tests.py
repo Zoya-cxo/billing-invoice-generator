@@ -476,6 +476,27 @@ class InvoiceSerializerBugFixTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["status"], "draft")
 
+    def test_create_rejects_quantity_below_minimum(self):
+        for quantity in ["0", "0.00", "-1.00"]:
+            with self.subTest(quantity=quantity):
+                invoice_count_before = Invoice.objects.count()
+                counter_before = InvoiceNumberCounter.objects.get(pk=1).last_number
+                payload = self._create_invoice_payload()
+                payload["items"][0]["quantity"] = quantity
+                response = self.client.post("/api/v1/invoices/", payload, format="json")
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("quantity", response.data["items"][0])
+                self.assertEqual(Invoice.objects.count(), invoice_count_before)
+                self.assertEqual(
+                    InvoiceNumberCounter.objects.get(pk=1).last_number, counter_before
+                )
+
+    def test_create_accepts_minimum_quantity(self):
+        payload = self._create_invoice_payload()
+        payload["items"][0]["quantity"] = "0.01"
+        response = self.client.post("/api/v1/invoices/", payload, format="json")
+        self.assertEqual(response.status_code, 201)
+
 
 class InvoiceNumberCounterConcurrencyTests(TransactionTestCase):
     THREADS = 8
