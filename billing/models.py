@@ -217,7 +217,10 @@ class InvoiceItem(models.Model):
     )
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
     tax_rate = models.DecimalField(max_digits=5, decimal_places=2)
-    discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        validators=[MinValueValidator(Decimal('0'))],
+    )
     hsn_sac_code = models.CharField(max_length=20)
     line_total = models.DecimalField(max_digits=12, decimal_places=2)
 

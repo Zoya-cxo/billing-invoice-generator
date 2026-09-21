@@ -551,6 +551,29 @@ class InvoiceSerializerBugFixTests(APITestCase):
                 response = self.client.post("/api/v1/invoices/", payload, format="json")
                 self.assertEqual(response.status_code, 201)
 
+    def test_create_rejects_negative_discount(self):
+        for discount in ["-0.01", "-1.00", "-10.05"]:
+            with self.subTest(discount=discount):
+                invoice_count_before = Invoice.objects.count()
+                counter_before = InvoiceNumberCounter.objects.get(pk=1).last_number
+                payload = self._create_invoice_payload()
+                payload["items"][0]["discount"] = discount
+                response = self.client.post("/api/v1/invoices/", payload, format="json")
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("discount", response.data["items"][0])
+                self.assertEqual(Invoice.objects.count(), invoice_count_before)
+                self.assertEqual(
+                    InvoiceNumberCounter.objects.get(pk=1).last_number, counter_before
+                )
+
+    def test_create_accepts_zero_and_small_positive_discount(self):
+        for discount in ["0", "0.00", "0.01"]:
+            with self.subTest(discount=discount):
+                payload = self._create_invoice_payload()
+                payload["items"][0]["discount"] = discount
+                response = self.client.post("/api/v1/invoices/", payload, format="json")
+                self.assertEqual(response.status_code, 201)
+
 
 class InvoiceNumberCounterConcurrencyTests(TransactionTestCase):
     THREADS = 8
