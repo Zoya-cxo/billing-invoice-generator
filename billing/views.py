@@ -12,7 +12,7 @@ from .serializers import (
 
 
 class CustomerViewSet(viewsets.ModelViewSet):
-    queryset = Customer.objects.all().order_by('name')
+    queryset = Customer.objects.all().order_by('name', 'id')
     serializer_class = CustomerSerializer
     permission_classes = [IsAuthenticated]
 
@@ -27,7 +27,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
 
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset = Product.objects.all().order_by('name')
+    queryset = Product.objects.all().order_by('name', 'id')
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated]
 

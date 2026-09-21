@@ -595,3 +595,45 @@ class InvoiceNumberCounterConcurrencyTests(TransactionTestCase):
         self.assertEqual(
             InvoiceNumberCounter.objects.get(pk=1).last_number, self.THREADS
         )
+
+
+class CustomerProductListOrderingTests(APITestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username="testadmin_ordering", password="testpass123")
+        self.client.force_authenticate(user=self.user)
+
+    def test_customers_with_equal_names_are_listed_in_id_order(self):
+        customers = [
+            Customer.objects.create(
+                name="Same Name",
+                email=f"samename{i}@example.com",
+                phone=f"90000000{i:02d}",
+                billing_address="1 Same Name Street",
+                state="27",
+            )
+            for i in range(3)
+        ]
+        customers[0].phone = "9111111111"
+        customers[0].save()
+        response = self.client.get("/api/v1/customers/")
+        self.assertEqual(response.status_code, 200)
+        listed_ids = [row["id"] for row in response.data["results"]]
+        self.assertEqual(listed_ids, sorted(c.id for c in customers))
+
+    def test_products_with_equal_names_are_listed_in_id_order(self):
+        products = [
+            Product.objects.create(
+                name="Same Name",
+                unit_price=Decimal("100.00"),
+                default_tax_rate=Decimal("18.00"),
+                hsn_sac_code="998315",
+            )
+            for _ in range(3)
+        ]
+        products[0].unit_price = Decimal("101.00")
+        products[0].save()
+        response = self.client.get("/api/v1/products/")
+        self.assertEqual(response.status_code, 200)
+        listed_ids = [row["id"] for row in response.data["results"]]
+        self.assertEqual(listed_ids, sorted(p.id for p in products))
