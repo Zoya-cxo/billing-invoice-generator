@@ -52,6 +52,17 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["unit_price", "tax_rate", "hsn_sac_code", "line_total"]
 
+    def validate(self, attrs):
+        product = attrs.get("product")
+        quantity = attrs.get("quantity")
+        discount = attrs.get("discount")
+        if product is not None and quantity is not None and discount is not None:
+            if discount > quantity * product.unit_price:
+                raise serializers.ValidationError(
+                    {"discount": "Discount cannot exceed the line amount (quantity x unit price)."}
+                )
+        return attrs
+
 
 class InvoiceSerializer(serializers.ModelSerializer):
     items = InvoiceItemSerializer(many=True)
