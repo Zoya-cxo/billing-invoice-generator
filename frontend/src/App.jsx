@@ -7,6 +7,7 @@ import CustomerList from './pages/CustomerList';
 import CustomerForm from './pages/CustomerForm';
 import ProductList from './pages/ProductList';
 import ProductForm from './pages/ProductForm';
+import InvoiceForm from './pages/InvoiceForm';
 
 function App() {
   return (
@@ -75,6 +76,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Placeholder label="Invoice List" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/invoices/new"
+            element={
+              <ProtectedRoute>
+                <InvoiceForm />
               </ProtectedRoute>
             }
           />
