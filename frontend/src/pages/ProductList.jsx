@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthFetch } from '../hooks/useAuthFetch';
 import { API_BASE_URL } from '../config';
+import { fetchAllPages } from '../utils/pagination';
 
 export default function ProductList() {
   const authFetch = useAuthFetch();
@@ -16,15 +17,18 @@ export default function ProductList() {
     setLoading(true);
     setError(null);
     try {
-      const response = await authFetch(`${API_BASE_URL}/api/v1/products/`);
-      if (response.ok) {
-        const data = await response.json();
-        setProducts(Array.isArray(data) ? data : data.results ?? []);
-      } else if (response.status !== 401) {
-        setError(`Server returned ${response.status}`);
-      }
+      const data = await fetchAllPages(authFetch, '/api/v1/products/');
+      setProducts(data);
     } catch (err) {
-      setError('Network error: could not reach the server');
+      if (err.status === 401) {
+        // handled elsewhere (auth redirect)
+      } else if (err.status) {
+        setError(`Server returned ${err.status}`);
+      } else if (err.truncated) {
+        setError('Too many products to load into the list.');
+      } else {
+        setError('Network error: could not reach the server');
+      }
     } finally {
       setLoading(false);
     }
