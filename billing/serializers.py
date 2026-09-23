@@ -243,8 +243,18 @@ class PaymentSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
+        invoice = validated_data["invoice"]
+        amount = validated_data["amount"]
         try:
-            return super().create(validated_data)
+            with transaction.atomic():
+                locked_invoice = Invoice.objects.select_for_update().get(pk=invoice.pk)
+                already_paid = sum(p.amount for p in locked_invoice.payments.all())
+                outstanding = locked_invoice.total - already_paid
+                if amount > outstanding:
+                    raise serializers.ValidationError(
+                        f"Payment of {amount} exceeds outstanding balance of {outstanding}."
+                    )
+                return super().create(validated_data)
         except IntegrityError:
             raise serializers.ValidationError(
                 "A payment with this idempotency key has already been recorded."

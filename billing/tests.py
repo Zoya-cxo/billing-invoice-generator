@@ -15,7 +15,7 @@ from .models import (
     Customer, Product, Invoice, InvoiceItem, Payment, Company,
     InvoiceNumberCounter,
 )
-from .serializers import InvoiceSerializer
+from .serializers import InvoiceSerializer, PaymentSerializer
 
 
 class PaymentViewSetTests(APITestCase):
@@ -660,3 +660,90 @@ class CustomerProductListOrderingTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         listed_ids = [row["id"] for row in response.data["results"]]
         self.assertEqual(listed_ids, sorted(p.id for p in products))
+
+
+class PaymentConcurrencyTests(TransactionTestCase):
+    THREADS = 2
+
+    def setUp(self):
+        self.customer = Customer.objects.create(
+            name="Test Customer",
+            email="customer@example.com",
+            phone="9999999999",
+            billing_address="123 Test Street",
+        )
+        self.product = Product.objects.create(
+            name="Test Product",
+            unit_price=Decimal("1000.00"),
+            default_tax_rate=Decimal("0.00"),
+            hsn_sac_code="998314",
+        )
+        self.invoice = Invoice.objects.create(
+            invoice_number="INV-CONC-001",
+            customer=self.customer,
+            issue_date="2026-01-01",
+            due_date="2026-01-31",
+            seller_name="Test Seller Pvt Ltd",
+            seller_gstin="27AAAPL1234C1Z5",
+            seller_state="27",
+            seller_address="Test Seller Address, Pune",
+        )
+        InvoiceItem.objects.create(
+            invoice=self.invoice,
+            product=self.product,
+            quantity=Decimal("1"),
+            unit_price=self.product.unit_price,
+            tax_rate=self.product.default_tax_rate,
+            hsn_sac_code=self.product.hsn_sac_code,
+        )
+        self.invoice.subtotal = Decimal("1000.00")
+        self.invoice.tax_total = Decimal("0.00")
+        self.invoice.total = Decimal("1000.00")
+        self.invoice.save(update_fields=["subtotal", "tax_total", "total"])
+        self.invoice.refresh_from_db()
+        self.invoice.transition_to(Invoice.STATUS_SENT)
+
+    def test_concurrent_payments_cannot_jointly_exceed_outstanding_balance(self):
+        barrier = threading.Barrier(self.THREADS)
+        results_lock = threading.Lock()
+        successes = []
+        errors = []
+        real_save = Payment.save
+
+        def slow_save(instance, *args, **kwargs):
+            time.sleep(0.05)
+            return real_save(instance, *args, **kwargs)
+
+        def worker():
+            try:
+                barrier.wait(timeout=10)
+                serializer = PaymentSerializer(data={
+                    "invoice": self.invoice.id,
+                    "amount": "700.00",
+                    "payment_date": "2026-01-15",
+                    "method": Payment.METHOD_CASH,
+                    "idempotency_key": str(uuid4()),
+                })
+                serializer.is_valid(raise_exception=True)
+                serializer.save()
+                with results_lock:
+                    successes.append(True)
+            except Exception as exc:
+                with results_lock:
+                    errors.append(exc)
+            finally:
+                connections.close_all()
+
+        with mock.patch.object(Payment, "save", slow_save):
+            threads = [threading.Thread(target=worker) for _ in range(self.THREADS)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=30)
+
+        self.assertEqual(len(successes), 1)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(Payment.objects.filter(invoice=self.invoice).count(), 1)
+        total_paid = sum(p.amount for p in Payment.objects.filter(invoice=self.invoice))
+        self.invoice.refresh_from_db()
+        self.assertLessEqual(total_paid, self.invoice.total)
