@@ -130,6 +130,10 @@ class InvoiceSerializer(serializers.ModelSerializer):
         validated_data["seller_state"] = company.state
         validated_data["seller_address"] = company.registered_address
 
+        validated_data.update(
+            self._customer_snapshot_fields(validated_data["customer"])
+        )
+
         with transaction.atomic():
             try:
                 validated_data["invoice_number"] = InvoiceNumberCounter.get_next_number()
@@ -153,6 +157,11 @@ class InvoiceSerializer(serializers.ModelSerializer):
                 "Cannot modify items on an invoice that is not in draft status."
             )
 
+        if "customer" in validated_data and instance.status != Invoice.STATUS_DRAFT:
+            raise serializers.ValidationError(
+                {"customer": "Cannot change the customer on an invoice that is not in draft status."}
+            )
+
         # Wrapped in full, not just the items branch: attribute updates,
         # the status transition, and the items delete-then-recreate are one
         # unit of work. Splitting the wrap would just move the same
@@ -160,6 +169,11 @@ class InvoiceSerializer(serializers.ModelSerializer):
         # transition_to() fails, items never touched but instance is already
         # half-updated).
         with transaction.atomic():
+            if "customer" in validated_data:
+                validated_data.update(
+                    self._customer_snapshot_fields(validated_data["customer"])
+                )
+
             for attr, value in validated_data.items():
                 setattr(instance, attr, value)
             instance.save()
@@ -204,6 +218,14 @@ class InvoiceSerializer(serializers.ModelSerializer):
         invoice.tax_total = tax_total
         invoice.total = subtotal + tax_total
         invoice.save(update_fields=["subtotal", "tax_total", "total"])
+
+    def _customer_snapshot_fields(self, customer):
+        return {
+            "customer_name": customer.name,
+            "customer_gstin": customer.gstin,
+            "customer_state": customer.state,
+            "customer_billing_address": customer.billing_address,
+        }
 
 
 class PaymentSerializer(serializers.ModelSerializer):

@@ -184,6 +184,10 @@ class Invoice(models.Model):
     # the time PDF export is built, fixing this means a migration + backfilling old
     # invoices, not just adding a field. Revisit before/during PDF export work.
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='invoices')
+    customer_name = models.CharField(max_length=255)
+    customer_gstin = models.CharField(max_length=15, null=True, blank=True)
+    customer_state = models.CharField(max_length=2, choices=GST_STATE_CHOICES)
+    customer_billing_address = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
     seller_name = models.CharField(max_length=255)
     seller_gstin = models.CharField(max_length=15)

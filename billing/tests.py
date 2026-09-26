@@ -566,6 +566,126 @@ class InvoiceSerializerBugFixTests(APITestCase):
                     InvoiceNumberCounter.objects.get(pk=1).last_number, counter_before
                 )
 
+    def test_patch_customer_on_draft_invoice_resnapshots_all_fields(self):
+        invoice = InvoiceSerializer(data={
+            "customer": self.customer.id,
+            "issue_date": "2026-01-01",
+            "due_date": "2026-01-31",
+            "items": [
+                {"product": self.product_a.id, "quantity": "1.00", "discount": "0"},
+            ],
+        })
+        invoice.is_valid(raise_exception=True)
+        invoice = invoice.save()
+        self.assertEqual(invoice.status, Invoice.STATUS_DRAFT)
+
+        new_customer = Customer.objects.create(
+            name="Reassigned Customer",
+            email="reassigned@example.com",
+            phone="9999999997",
+            gstin="27BBBPL5678D1Z6",
+            state="09",
+            billing_address="789 New Street",
+        )
+
+        response = self.client.patch(
+            f"/api/v1/invoices/{invoice.id}/",
+            {"customer": new_customer.id},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.customer_id, new_customer.id)
+        self.assertEqual(invoice.customer_name, "Reassigned Customer")
+        self.assertEqual(invoice.customer_gstin, "27BBBPL5678D1Z6")
+        self.assertEqual(invoice.customer_state, "09")
+        self.assertEqual(invoice.customer_billing_address, "789 New Street")
+
+    def test_patch_customer_on_non_draft_invoice_rejected_and_snapshot_unchanged(self):
+        invoice = InvoiceSerializer(data={
+            "customer": self.customer.id,
+            "issue_date": "2026-01-01",
+            "due_date": "2026-01-31",
+            "items": [
+                {"product": self.product_a.id, "quantity": "1.00", "discount": "0"},
+            ],
+        })
+        invoice.is_valid(raise_exception=True)
+        invoice = invoice.save()
+        invoice.transition_to(Invoice.STATUS_SENT)
+
+        original_customer_name = invoice.customer_name
+        original_customer_id = invoice.customer_id
+
+        new_customer = Customer.objects.create(
+            name="Should Not Stick",
+            email="shouldnotstick@example.com",
+            phone="9999999996",
+            state="07",
+            billing_address="000 Rejected Street",
+        )
+
+        response = self.client.patch(
+            f"/api/v1/invoices/{invoice.id}/",
+            {"customer": new_customer.id},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("customer", response.data)
+
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.customer_id, original_customer_id)
+        self.assertEqual(invoice.customer_name, original_customer_name)
+
+    def test_patch_unrelated_field_on_non_draft_invoice_does_not_trigger_customer_gate(self):
+        data = {
+            "customer": self.customer.id,
+            "issue_date": "2026-01-01",
+            "due_date": "2026-01-31",
+            "items": [
+                {"product": self.product_a.id, "quantity": "1.00", "discount": "0"},
+            ],
+        }
+        serializer = InvoiceSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        invoice = serializer.save()
+        invoice.transition_to(Invoice.STATUS_SENT)
+
+        update_serializer = InvoiceSerializer(
+            instance=invoice,
+            data={"due_date": "2026-02-15"},
+            partial=True,
+        )
+        update_serializer.is_valid(raise_exception=True)
+        updated_invoice = update_serializer.save()
+
+        self.assertEqual(str(updated_invoice.due_date), "2026-02-15")
+
+    def test_create_populates_customer_snapshot_fields(self):
+        snapshot_customer = Customer.objects.create(
+            name="Snapshot Source Customer",
+            email="snapshot@example.com",
+            phone="9999999995",
+            gstin="09AAAPL5678D1Z3",
+            state="09",
+            billing_address="789 Snapshot Lane",
+        )
+        data = {
+            "customer": snapshot_customer.id,
+            "issue_date": "2026-01-01",
+            "due_date": "2026-01-31",
+            "items": [
+                {"product": self.product_a.id, "quantity": "1.00", "discount": "0"},
+            ],
+        }
+        serializer = InvoiceSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        invoice = serializer.save()
+
+        self.assertEqual(invoice.customer_name, snapshot_customer.name)
+        self.assertEqual(invoice.customer_gstin, snapshot_customer.gstin)
+        self.assertEqual(invoice.customer_state, snapshot_customer.state)
+        self.assertEqual(invoice.customer_billing_address, snapshot_customer.billing_address)
+
     def test_create_accepts_zero_and_small_positive_discount(self):
         for discount in ["0", "0.00", "0.01"]:
             with self.subTest(discount=discount):

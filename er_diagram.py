@@ -85,7 +85,11 @@ attribute('inv_seller_name', 'seller_name\n(snapshot)', pos='2.5,6!')
 attribute('inv_seller_gstin', 'seller_gstin\n(snapshot)', pos='4.5,6.8!')
 attribute('inv_seller_state', 'seller_state\n(snapshot)', pos='7,6.5!')
 attribute('inv_seller_addr', 'seller_address\n(snapshot)', pos='0.5,5!')
-for a in ['inv_id','inv_num','inv_status','inv_issue','inv_due','inv_subtotal','inv_taxtotal','inv_total','inv_irn','inv_qr','inv_seller_name','inv_seller_gstin','inv_seller_state','inv_seller_addr']:
+attribute('inv_cust_name', 'customer_name\n(snapshot)', pos='4.5,-2!')
+attribute('inv_cust_gstin', 'customer_gstin\n(snapshot)', pos='2,-4!')
+attribute('inv_cust_state', 'customer_state\n(snapshot)', pos='6.5,-4.5!')
+attribute('inv_cust_addr', 'customer_billing_address\n(snapshot)', pos='0,-1.5!')
+for a in ['inv_id','inv_num','inv_status','inv_issue','inv_due','inv_subtotal','inv_taxtotal','inv_total','inv_irn','inv_qr','inv_seller_name','inv_seller_gstin','inv_seller_state','inv_seller_addr','inv_cust_name','inv_cust_gstin','inv_cust_state','inv_cust_addr']:
     attach('INVOICE', a)
 
 attribute('item_id', 'id', pos='9,-2!', key=True)
