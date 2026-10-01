@@ -686,6 +686,47 @@ class InvoiceSerializerBugFixTests(APITestCase):
         self.assertEqual(invoice.customer_state, snapshot_customer.state)
         self.assertEqual(invoice.customer_billing_address, snapshot_customer.billing_address)
 
+    def test_patch_with_items_and_status_together_processes_items_before_transition(self):
+        data = {
+            "customer": self.customer.id,
+            "issue_date": "2026-01-01",
+            "due_date": "2026-01-31",
+            "items": [
+                {"product": self.product_a.id, "quantity": "1.00", "discount": "0"},
+            ],
+        }
+        serializer = InvoiceSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        invoice = serializer.save()
+
+        call_order = []
+
+        original_create_items = InvoiceSerializer._create_items
+        def spy_create_items(self, invoice_arg, items_data):
+            call_order.append("create_items")
+            return original_create_items(self, invoice_arg, items_data)
+
+        original_transition_to = Invoice.transition_to
+        def spy_transition_to(self, new_status):
+            call_order.append("transition_to")
+            return original_transition_to(self, new_status)
+
+        with mock.patch.object(InvoiceSerializer, "_create_items", spy_create_items), \
+             mock.patch.object(Invoice, "transition_to", spy_transition_to):
+            response = self.client.patch(
+                f"/api/v1/invoices/{invoice.id}/",
+                {
+                    "items": [
+                        {"product": self.product_b.id, "quantity": "2.00", "discount": "0"},
+                    ],
+                    "status": Invoice.STATUS_SENT,
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(call_order, ["create_items", "transition_to"])
+
     def test_create_accepts_zero_and_small_positive_discount(self):
         for discount in ["0", "0.00", "0.01"]:
             with self.subTest(discount=discount):
@@ -780,6 +821,149 @@ class CustomerProductListOrderingTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         listed_ids = [row["id"] for row in response.data["results"]]
         self.assertEqual(listed_ids, sorted(p.id for p in products))
+
+
+class InvoiceUpdateConcurrencyTests(TransactionTestCase):
+    THREADS = 2
+
+    def setUp(self):
+        self.customer = Customer.objects.create(
+            name="Test Customer",
+            email="customer@example.com",
+            phone="9999999999",
+            billing_address="123 Test Street",
+        )
+        self.product = Product.objects.create(
+            name="Test Product",
+            unit_price=Decimal("1000.00"),
+            default_tax_rate=Decimal("0.00"),
+            hsn_sac_code="998314",
+        )
+        self.invoice = Invoice.objects.create(
+            invoice_number="INV-CONC-UPD-001",
+            customer=self.customer,
+            issue_date="2026-01-01",
+            due_date="2026-01-31",
+            seller_name="Test Seller Pvt Ltd",
+            seller_gstin="27AAAPL1234C1Z5",
+            seller_state="27",
+            seller_address="Test Seller Address, Pune",
+        )
+        self.invoice.status = Invoice.STATUS_DRAFT
+        self.invoice.save(update_fields=["status"])
+        InvoiceItem.objects.create(
+            invoice=self.invoice,
+            product=self.product,
+            quantity=Decimal("1"),
+            unit_price=self.product.unit_price,
+            tax_rate=self.product.default_tax_rate,
+            hsn_sac_code=self.product.hsn_sac_code,
+        )
+        self.invoice.subtotal = Decimal("1000.00")
+        self.invoice.tax_total = Decimal("0.00")
+        self.invoice.total = Decimal("1000.00")
+        self.invoice.save(update_fields=["subtotal", "tax_total", "total"])
+        self.invoice.refresh_from_db()
+
+        self.baseline_item_pks = sorted(self.invoice.items.values_list("pk", flat=True))
+        self.baseline_subtotal = self.invoice.subtotal
+        self.baseline_tax_total = self.invoice.tax_total
+        self.baseline_total = self.invoice.total
+
+    def test_update_gate_recheck_blocks_stale_items_write_under_status_transition(self):
+        barrier = threading.Barrier(self.THREADS)
+        results_lock = threading.Lock()
+        outcomes = {}
+        real_save = Invoice.save
+
+        def slow_save(instance, *args, **kwargs):
+            if threading.current_thread().name == "Thread1":
+                time.sleep(0.3)
+            return real_save(instance, *args, **kwargs)
+
+        def worker_transition():
+            try:
+                barrier.wait(timeout=10)
+                invoice = Invoice.objects.get(pk=self.invoice.pk)
+                serializer = InvoiceSerializer(
+                    instance=invoice,
+                    data={"status": Invoice.STATUS_SENT},
+                    partial=True,
+                )
+                serializer.is_valid(raise_exception=True)
+                result = serializer.save()
+                with results_lock:
+                    outcomes["thread1"] = ("success", result.status)
+            except Exception as exc:
+                with results_lock:
+                    outcomes["thread1"] = ("error", exc)
+            finally:
+                connections.close_all()
+
+        def worker_items():
+            try:
+                barrier.wait(timeout=10)
+                time.sleep(0.015)
+                invoice = Invoice.objects.get(pk=self.invoice.pk)
+                start = time.perf_counter()
+                try:
+                    serializer = InvoiceSerializer(
+                        instance=invoice,
+                        data={
+                            "items": [
+                                {"product": self.product.id, "quantity": "2", "discount": "0.00"}
+                            ]
+                        },
+                        partial=True,
+                    )
+                    serializer.is_valid(raise_exception=True)
+                    serializer.save()
+                    with results_lock:
+                        outcomes["thread2"] = ("success", None)
+                except Exception as exc:
+                    with results_lock:
+                        outcomes["thread2"] = ("error", exc)
+                finally:
+                    duration = time.perf_counter() - start
+                    with results_lock:
+                        outcomes["thread2_duration"] = duration
+            finally:
+                connections.close_all()
+
+        with mock.patch.object(Invoice, "save", slow_save):
+            threads = [
+                threading.Thread(target=worker_transition, name="Thread1"),
+                threading.Thread(target=worker_items, name="Thread2"),
+            ]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=30)
+
+        self.assertIn("thread1", outcomes)
+        self.assertIn("thread2", outcomes)
+
+        outcome1, value1 = outcomes["thread1"]
+        self.assertEqual(outcome1, "success")
+        self.assertEqual(value1, Invoice.STATUS_SENT)
+
+        outcome2, exc2 = outcomes["thread2"]
+        self.assertEqual(outcome2, "error")
+        self.assertIn(
+            "Cannot modify items on an invoice that is not in draft status.",
+            str(exc2.detail),
+        )
+
+        self.assertGreaterEqual(outcomes["thread2_duration"], 0.25)
+
+        self.invoice.refresh_from_db()
+        self.assertEqual(
+            sorted(self.invoice.items.values_list("pk", flat=True)),
+            self.baseline_item_pks,
+        )
+        self.assertEqual(self.invoice.subtotal, self.baseline_subtotal)
+        self.assertEqual(self.invoice.tax_total, self.baseline_tax_total)
+        self.assertEqual(self.invoice.total, self.baseline_total)
 
 
 class PaymentConcurrencyTests(TransactionTestCase):

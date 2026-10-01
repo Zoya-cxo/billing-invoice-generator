@@ -152,23 +152,31 @@ class InvoiceSerializer(serializers.ModelSerializer):
         items_data = validated_data.pop("items", None)
         new_status = validated_data.pop("status", None)
 
-        if instance.status != Invoice.STATUS_DRAFT and items_data is not None:
-            raise serializers.ValidationError(
-                "Cannot modify items on an invoice that is not in draft status."
-            )
-
-        if "customer" in validated_data and instance.status != Invoice.STATUS_DRAFT:
-            raise serializers.ValidationError(
-                {"customer": "Cannot change the customer on an invoice that is not in draft status."}
-            )
-
-        # Wrapped in full, not just the items branch: attribute updates,
-        # the status transition, and the items delete-then-recreate are one
-        # unit of work. Splitting the wrap would just move the same
-        # partial-write risk one level up (e.g. attributes saved, then
-        # transition_to() fails, items never touched but instance is already
-        # half-updated).
+        # Locked and re-fetched inside the transaction: without this, two
+        # concurrent PATCHes can each read an unlocked, stale instance.status
+        # and both pass their gate checks against data the other request is
+        # about to invalidate (e.g. a status transition racing an items
+        # rebuild). Gates below are checked against this re-fetched instance,
+        # not the stale one passed in as a parameter.
+        #
+        # Items are processed before transition_to(): InvoiceItem.save()'s own
+        # draft-status guard means items-after-transition on a combined
+        # items+status PATCH raises an unhandled ValueError, not a clean 400 -
+        # a real crash, confirmed via fail-first test, not just a defensive
+        # reorder.
         with transaction.atomic():
+            instance = Invoice.objects.select_for_update().get(pk=instance.pk)
+
+            if instance.status != Invoice.STATUS_DRAFT and items_data is not None:
+                raise serializers.ValidationError(
+                    "Cannot modify items on an invoice that is not in draft status."
+                )
+
+            if "customer" in validated_data and instance.status != Invoice.STATUS_DRAFT:
+                raise serializers.ValidationError(
+                    {"customer": "Cannot change the customer on an invoice that is not in draft status."}
+                )
+
             if "customer" in validated_data:
                 validated_data.update(
                     self._customer_snapshot_fields(validated_data["customer"])
@@ -178,16 +186,16 @@ class InvoiceSerializer(serializers.ModelSerializer):
                 setattr(instance, attr, value)
             instance.save()
 
+            if items_data is not None:
+                instance.items.all().delete()
+                self._create_items(instance, items_data)
+                self._recalculate_totals(instance)
+
             if new_status is not None and new_status != instance.status:
                 try:
                     instance.transition_to(new_status)
                 except ValueError as e:
                     raise serializers.ValidationError(str(e))
-
-            if items_data is not None:
-                instance.items.all().delete()
-                self._create_items(instance, items_data)
-                self._recalculate_totals(instance)
 
         return instance
 
