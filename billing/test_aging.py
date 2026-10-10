@@ -1,12 +1,15 @@
 from datetime import date, timedelta
 from decimal import Decimal
+from io import StringIO
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from .aging_scenarios import SCENARIOS, EXCLUDED, due_date_for, payment_amount_for
-from .models import Customer, Invoice, Payment
+from .models import Company, Customer, Invoice, Payment, Product
+from .serializers import InvoiceSerializer
 
 ALL_BUCKET_KEYS = ['not_due', 'days_0_30', 'days_31_60', 'days_61_90', 'days_90_plus']
 
@@ -133,3 +136,76 @@ class AgingReportTests(APITestCase):
         data = self._get_aging_response()
         found_in = self._find_bucket_containing(data, draft_invoice.invoice_number)
         self.assertEqual(found_in, [], f"draft invoice unexpectedly appeared in {found_in}")
+
+
+class SeedAgingCleanTests(APITestCase):
+    def setUp(self):
+        Company.objects.create(
+            name="Clean Test Seller",
+            gstin="27AAAPL1234C1Z5",
+            state="27",
+            registered_address="Clean Test Address",
+        )
+        self.customer = Customer.objects.create(
+            name="Clean Test Customer",
+            email="clean@example.com",
+            phone="9999999997",
+            billing_address="789 Test Street",
+        )
+        self.product = Product.objects.create(
+            name="Clean Product",
+            unit_price=Decimal("10.00"),
+            default_tax_rate=Decimal("9.00"),
+            hsn_sac_code="998316",
+        )
+
+    def seeded_pks(self):
+        return set(
+            Invoice.objects.filter(
+                invoice_number__startswith="SEED-AGING-"
+            ).values_list("pk", flat=True)
+        )
+
+    def test_clean_removes_prior_seed_rows_and_payment_then_reseeds(self):
+        expected_payments = sum(
+            1 for s in SCENARIOS if payment_amount_for(s) > 0
+        )
+
+        call_command("seed_aging_dev_data", stdout=StringIO())
+        old_pks = self.seeded_pks()
+        self.assertEqual(len(old_pks), len(SCENARIOS))
+        self.assertEqual(
+            Payment.objects.filter(invoice__pk__in=old_pks).count(),
+            expected_payments,
+        )
+
+        serializer = InvoiceSerializer(
+            data={
+                "customer": self.customer.id,
+                "issue_date": "2026-01-01",
+                "due_date": "2026-01-31",
+                "items": [
+                    {"product": self.product.id, "quantity": "1.00", "discount": "0"}
+                ],
+            }
+        )
+        serializer.is_valid(raise_exception=True)
+        real_invoice = serializer.save()
+        real_payment = Payment.objects.create(
+            invoice=real_invoice,
+            amount=Decimal("1.00"),
+            payment_date=date.today(),
+            method=Payment.METHOD_CASH,
+        )
+
+        call_command("seed_aging_dev_data", "--clean", stdout=StringIO())
+
+        new_pks = self.seeded_pks()
+        self.assertEqual(len(new_pks), len(SCENARIOS))
+        self.assertTrue(old_pks.isdisjoint(new_pks))
+        self.assertEqual(
+            Payment.objects.filter(invoice__pk__in=new_pks).count(),
+            expected_payments,
+        )
+        self.assertTrue(Invoice.objects.filter(pk=real_invoice.pk).exists())
+        self.assertTrue(Payment.objects.filter(pk=real_payment.pk).exists())

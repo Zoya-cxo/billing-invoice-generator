@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from billing.aging_scenarios import SCENARIOS, due_date_for, payment_amount_for
-from billing.models import Customer, Invoice, Payment
+from billing.models import Customer, Invoice, Payment, allow_invoice_deletion
 
 SEED_PREFIX = 'SEED-AGING-'
 
@@ -22,10 +22,17 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         if options['clean']:
-            deleted, _ = Invoice.objects.filter(
-                invoice_number__startswith=SEED_PREFIX
-            ).delete()
-            self.stdout.write(f'Deleted {deleted} previously seeded row(s).')
+            with transaction.atomic():
+                payments_deleted, _ = Payment.objects.filter(
+                    invoice__invoice_number__startswith=SEED_PREFIX
+                ).delete()
+                with allow_invoice_deletion():
+                    invoices_deleted, _ = Invoice.objects.filter(
+                        invoice_number__startswith=SEED_PREFIX
+                    ).delete()
+            self.stdout.write(
+                f'Deleted {payments_deleted + invoices_deleted} previously seeded row(s).'
+            )
 
         customer = Customer.objects.first()
         if customer is None:

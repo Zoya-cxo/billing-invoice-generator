@@ -45,7 +45,11 @@ class ProductViewSet(viewsets.ModelViewSet):
             )
 
 
-class InvoiceViewSet(viewsets.ModelViewSet):
+class InvoiceViewSet(mixins.CreateModelMixin,
+                     mixins.ListModelMixin,
+                     mixins.RetrieveModelMixin,
+                     mixins.UpdateModelMixin,
+                     viewsets.GenericViewSet):
     queryset = Invoice.objects.all().order_by('-issue_date')
     serializer_class = InvoiceSerializer
     permission_classes = [IsAuthenticated]

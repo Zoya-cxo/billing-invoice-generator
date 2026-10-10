@@ -966,6 +966,112 @@ class InvoiceUpdateConcurrencyTests(TransactionTestCase):
         self.assertEqual(self.invoice.total, self.baseline_total)
 
 
+class InvoiceDeleteGuardTests(APITestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username="guardadmin", password="testpass123")
+        self.client.force_authenticate(user=self.user)
+        self.customer = Customer.objects.create(
+            name="Guard Customer",
+            email="guard@example.com",
+            phone="9999999997",
+            billing_address="789 Guard Street",
+        )
+        self.product = Product.objects.create(
+            name="Guard Product",
+            unit_price=Decimal("10.00"),
+            default_tax_rate=Decimal("9.00"),
+            hsn_sac_code="998317",
+        )
+
+    def make_invoice(self, number, status=Invoice.STATUS_DRAFT):
+        return Invoice.objects.create(
+            invoice_number=number,
+            customer=self.customer,
+            status=status,
+            seller_name="Guard Seller",
+            seller_gstin="27AAAPL1234C1Z5",
+            seller_state="27",
+            seller_address="Guard Address",
+            issue_date="2026-01-01",
+            due_date="2026-01-31",
+            subtotal=Decimal("100.00"),
+            tax_total=Decimal("0.00"),
+            total=Decimal("100.00"),
+        )
+
+    def test_instance_delete_is_blocked(self):
+        invoice = self.make_invoice("GUARD-000001")
+        with self.assertRaises(ValueError):
+            with transaction.atomic():
+                invoice.delete()
+        self.assertTrue(Invoice.objects.filter(pk=invoice.pk).exists())
+
+    def test_queryset_delete_is_blocked(self):
+        invoice = self.make_invoice("GUARD-000002")
+        with self.assertRaises(ValueError):
+            with transaction.atomic():
+                Invoice.objects.filter(pk=invoice.pk).delete()
+        self.assertTrue(Invoice.objects.filter(pk=invoice.pk).exists())
+
+    def test_api_delete_returns_405_and_keeps_row(self):
+        invoice = self.make_invoice("GUARD-000003")
+        response = self.client.delete(f"/api/v1/invoices/{invoice.id}/")
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(Invoice.objects.filter(pk=invoice.pk).exists())
+
+    def test_delete_is_blocked_for_every_status(self):
+        for invoice_status in [
+            Invoice.STATUS_DRAFT,
+            Invoice.STATUS_SENT,
+            Invoice.STATUS_OVERDUE,
+            Invoice.STATUS_PAID,
+            Invoice.STATUS_CANCELLED,
+        ]:
+            with self.subTest(status=invoice_status):
+                invoice = self.make_invoice(f"GUARD-{invoice_status}", invoice_status)
+                with self.assertRaises(ValueError):
+                    with transaction.atomic():
+                        invoice.delete()
+                self.assertTrue(Invoice.objects.filter(pk=invoice.pk).exists())
+
+    def test_blocked_delete_leaves_items_intact(self):
+        invoice = self.make_invoice("GUARD-000004")
+        InvoiceItem.objects.create(
+            invoice=invoice,
+            product=self.product,
+            quantity=Decimal("1.00"),
+            unit_price=Decimal("10.00"),
+            tax_rate=Decimal("9.00"),
+            discount=Decimal("0.00"),
+            hsn_sac_code="998317",
+        )
+        with self.assertRaises(ValueError):
+            with transaction.atomic():
+                invoice.delete()
+        self.assertEqual(InvoiceItem.objects.filter(invoice_id=invoice.pk).count(), 1)
+
+    def test_bypass_allows_delete(self):
+        from .models import allow_invoice_deletion
+
+        invoice = self.make_invoice("GUARD-000005", Invoice.STATUS_SENT)
+        with allow_invoice_deletion():
+            invoice.delete()
+        self.assertFalse(Invoice.objects.filter(pk=invoice.pk).exists())
+
+    def test_bypass_does_not_leak_after_exit(self):
+        from .models import allow_invoice_deletion
+
+        first = self.make_invoice("GUARD-000006")
+        with allow_invoice_deletion():
+            first.delete()
+        second = self.make_invoice("GUARD-000007")
+        with self.assertRaises(ValueError):
+            with transaction.atomic():
+                second.delete()
+        self.assertTrue(Invoice.objects.filter(pk=second.pk).exists())
+
+
 class PaymentConcurrencyTests(TransactionTestCase):
     THREADS = 2
 

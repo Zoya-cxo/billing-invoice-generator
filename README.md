@@ -22,3 +22,16 @@ The counter row is seeded by migration 0009 with pk=1.
 
 - `Invoice.customer_name`, `customer_gstin`, `customer_state`, and `customer_billing_address` are snapshotted from the `Customer` row at invoice creation time, and re-snapshotted if the customer is changed while the invoice is still in draft status. Once an invoice leaves draft status, its customer cannot be reassigned, and its snapshot fields no longer change even if the underlying `Customer` row is edited.
 - Invoices created before this snapshot existed were backfilled by a data migration (0013) from each invoice's *current* `Customer` row at the time the migration ran. This is accurate as of the migration's run date, not as of each invoice's actual creation date. If a customer's details were edited between an old invoice's creation and the migration running, that invoice's backfilled snapshot reflects the edited data, not the original. No historical record exists to backfill correctly, so this is accepted as a known limitation, not fixed further.
+
+## Invoice deletion guard
+
+Invoices cannot be deleted through the application. Deleting one would leave a permanent gap in the consecutive invoice-number sequence and would destroy a legal record. To cancel an invoice, use the status transition instead.
+
+- `DELETE /api/v1/invoices/{id}/` returns 405 (`InvoiceViewSet` has no destroy route).
+- A `pre_delete` receiver on `Invoice` raises `ValueError` for instance, queryset and cascade deletes, in every status including draft.
+- Django checks `PROTECT` before `pre_delete`, so an invoice with payments raises `ProtectedError` first.
+- The only bypass is the `allow_invoice_deletion()` context manager, used by `seed_aging_dev_data --clean` for dev data.
+- A caller that catches this `ValueError` inside an enclosing transaction needs its own `transaction.atomic()` savepoint, because the exception is raised inside Django's deletion collector and marks the outer transaction as broken.
+- Not covered: raw SQL and `_raw_delete`.
+
+Known limitation: payment immutability is enforced at instance level only. `Payment.delete()` and `Payment.save()` raise, but `Payment.objects.filter(...).delete()` and the admin's bulk delete action bypass them. Accepted for a single-administrator system. `seed_aging_dev_data --clean` currently relies on this, so a future Payment guard needs a matching bypass there.

@@ -1,6 +1,10 @@
+import contextlib
+import contextvars
 from decimal import Decimal
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models.signals import pre_delete
+from django.dispatch import receiver
 from django.core.exceptions import ImproperlyConfigured
 
 
@@ -272,3 +276,21 @@ class Payment(models.Model):
 
     def __str__(self):
         return f'{self.amount} for {self.invoice.invoice_number}' 
+
+
+_invoice_deletion_allowed = contextvars.ContextVar('invoice_deletion_allowed', default=False)
+
+
+@contextlib.contextmanager
+def allow_invoice_deletion():
+    token = _invoice_deletion_allowed.set(True)
+    try:
+        yield
+    finally:
+        _invoice_deletion_allowed.reset(token)
+
+
+@receiver(pre_delete, sender=Invoice)
+def block_invoice_deletion(sender, instance, **kwargs):
+    if not _invoice_deletion_allowed.get():
+        raise ValueError('Invoices cannot be deleted; cancel the invoice instead')
