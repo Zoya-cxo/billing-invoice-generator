@@ -1,0 +1,53 @@
+{
+  "id": 3,
+  "invoice_number": "INV-000003",
+  "customer": 3,
+  "customer_name": "Shri Ganesh Precision Tools and Industrial Supplies Pvt Ltd.",
+  "customer_gstin": "24AABCS1234F1Z8",
+  "customer_state": "24",
+  "customer_billing_address": "Unit 9, GIDC Vatva, Ahmedabad",
+  "status": "sent",
+  "seller_name": "Demo Seller Pvt Ltd",
+  "seller_gstin": "27AAAPL1234C1Z5",
+  "seller_state": "27",
+  "seller_address": "Plot 5, MIDC Bhosari, Pune",
+  "issue_date": "2026-09-20",
+  "due_date": "2026-10-20",
+  "subtotal": "11950.00",
+  "tax_total": "1897.50",
+  "total": "13847.50",
+  "paid": "5000.00",
+  "outstanding": "8847.50",
+  "items": [
+    {
+      "id": 4,
+      "product": 1,
+      "product_name": "Hydraulic Press Service",
+      "quantity": "2.00",
+      "unit_price": "5000.00",
+      "tax_rate": "18.00",
+      "discount": "0.00",
+      "hsn_sac_code": "998719",
+      "line_total": "10000.00"
+    },
+    {
+      "id": 5,
+      "product": 2,
+      "product_name": "Fastener Kit M8",
+      "quantity": "5.00",
+      "unit_price": "400.00",
+      "tax_rate": "5.00",
+      "discount": "50.00",
+      "hsn_sac_code": "7318",
+      "line_total": "1950.00"
+    }
+  ],
+  "payments": [
+    {
+      "id": 2,
+      "amount": "5000.00",
+      "payment_date": "2026-10-01",
+      "method": "upi"
+    }
+  ]
+}

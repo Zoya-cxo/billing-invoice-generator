@@ -1,0 +1,183 @@
+{
+  "count": 4,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 4,
+      "invoice_number": "INV-000004",
+      "customer": 4,
+      "customer_name": "Sample Traders",
+      "customer_gstin": "07BBBPL5678D1Z6",
+      "customer_state": "07",
+      "customer_billing_address": "12 Connaught Place, New Delhi",
+      "status": "draft",
+      "seller_name": "Demo Seller Pvt Ltd",
+      "seller_gstin": "27AAAPL1234C1Z5",
+      "seller_state": "27",
+      "seller_address": "Plot 5, MIDC Bhosari, Pune",
+      "issue_date": "2026-10-14",
+      "due_date": "2026-11-13",
+      "subtotal": "12345678.90",
+      "tax_total": "0.00",
+      "total": "12345678.90",
+      "paid": "0.00",
+      "outstanding": "12345678.90",
+      "items": [
+        {
+          "id": 6,
+          "product": 6,
+          "product_name": "Annual Maintenance Contract",
+          "quantity": "1.00",
+          "unit_price": "12345678.90",
+          "tax_rate": "0.00",
+          "discount": "0.00",
+          "hsn_sac_code": "998719",
+          "line_total": "12345678.90"
+        }
+      ],
+      "payments": []
+    },
+    {
+      "id": 3,
+      "invoice_number": "INV-000003",
+      "customer": 3,
+      "customer_name": "Shri Ganesh Precision Tools and Industrial Supplies Pvt Ltd.",
+      "customer_gstin": "24AABCS1234F1Z8",
+      "customer_state": "24",
+      "customer_billing_address": "Unit 9, GIDC Vatva, Ahmedabad",
+      "status": "sent",
+      "seller_name": "Demo Seller Pvt Ltd",
+      "seller_gstin": "27AAAPL1234C1Z5",
+      "seller_state": "27",
+      "seller_address": "Plot 5, MIDC Bhosari, Pune",
+      "issue_date": "2026-09-20",
+      "due_date": "2026-10-20",
+      "subtotal": "11950.00",
+      "tax_total": "1897.50",
+      "total": "13847.50",
+      "paid": "5000.00",
+      "outstanding": "8847.50",
+      "items": [
+        {
+          "id": 4,
+          "product": 1,
+          "product_name": "Hydraulic Press Service",
+          "quantity": "2.00",
+          "unit_price": "5000.00",
+          "tax_rate": "18.00",
+          "discount": "0.00",
+          "hsn_sac_code": "998719",
+          "line_total": "10000.00"
+        },
+        {
+          "id": 5,
+          "product": 2,
+          "product_name": "Fastener Kit M8",
+          "quantity": "5.00",
+          "unit_price": "400.00",
+          "tax_rate": "5.00",
+          "discount": "50.00",
+          "hsn_sac_code": "7318",
+          "line_total": "1950.00"
+        }
+      ],
+      "payments": [
+        {
+          "id": 2,
+          "amount": "5000.00",
+          "payment_date": "2026-10-01",
+          "method": "upi"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "invoice_number": "INV-000002",
+      "customer": 2,
+      "customer_name": "Kiran Works",
+      "customer_gstin": "29AABCK5678G1Z2",
+      "customer_state": "29",
+      "customer_billing_address": "34 Peenya Industrial Area, Bengaluru",
+      "status": "overdue",
+      "seller_name": "Demo Seller Pvt Ltd",
+      "seller_gstin": "27AAAPL1234C1Z5",
+      "seller_state": "27",
+      "seller_address": "Plot 5, MIDC Bhosari, Pune",
+      "issue_date": "2026-08-06",
+      "due_date": "2026-09-05",
+      "subtotal": "6000.00",
+      "tax_total": "1080.00",
+      "total": "7080.00",
+      "paid": "0.00",
+      "outstanding": "7080.00",
+      "items": [
+        {
+          "id": 3,
+          "product": 3,
+          "product_name": "CNC Job Work",
+          "quantity": "4.00",
+          "unit_price": "1500.00",
+          "tax_rate": "18.00",
+          "discount": "0.00",
+          "hsn_sac_code": "998898",
+          "line_total": "6000.00"
+        }
+      ],
+      "payments": []
+    },
+    {
+      "id": 1,
+      "invoice_number": "INV-000001",
+      "customer": 1,
+      "customer_name": "Anand Stores",
+      "customer_gstin": "27AABCA1234B1Z5",
+      "customer_state": "27",
+      "customer_billing_address": "8 Laxmi Road, Pune",
+      "status": "paid",
+      "seller_name": "Demo Seller Pvt Ltd",
+      "seller_gstin": "27AAAPL1234C1Z5",
+      "seller_state": "27",
+      "seller_address": "Plot 5, MIDC Bhosari, Pune",
+      "issue_date": "2026-08-01",
+      "due_date": "2026-08-31",
+      "subtotal": "5998.50",
+      "tax_total": "863.82",
+      "total": "6862.32",
+      "paid": "6862.32",
+      "outstanding": "0.00",
+      "items": [
+        {
+          "id": 1,
+          "product": 4,
+          "product_name": "Industrial Widget",
+          "quantity": "10.00",
+          "unit_price": "250.00",
+          "tax_rate": "18.00",
+          "discount": "100.00",
+          "hsn_sac_code": "8481",
+          "line_total": "2400.00"
+        },
+        {
+          "id": 2,
+          "product": 5,
+          "product_name": "Precision Gauge",
+          "quantity": "3.00",
+          "unit_price": "1199.50",
+          "tax_rate": "12.00",
+          "discount": "0.00",
+          "hsn_sac_code": "9026",
+          "line_total": "3598.50"
+        }
+      ],
+      "payments": [
+        {
+          "id": 1,
+          "amount": "6862.32",
+          "payment_date": "2026-08-20",
+          "method": "bank_transfer"
+        }
+      ]
+    }
+  ]
+}
