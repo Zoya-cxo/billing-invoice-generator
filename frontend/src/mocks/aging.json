@@ -1,0 +1,57 @@
+{
+  "not_due": [
+    {
+      "id": 3,
+      "invoice_number": "INV-000003",
+      "customer": "Shri Ganesh Precision Tools and Industrial Supplies Pvt Ltd.",
+      "due_date": "2026-10-20",
+      "total": "13847.50",
+      "outstanding": "8847.50",
+      "days_overdue": 0
+    }
+  ],
+  "days_0_30": [
+    {
+      "id": 5,
+      "invoice_number": "INV-000005",
+      "customer": "Anand Stores",
+      "due_date": "2026-10-02",
+      "total": "5900.00",
+      "outstanding": "2900.00",
+      "days_overdue": 12
+    }
+  ],
+  "days_31_60": [
+    {
+      "id": 2,
+      "invoice_number": "INV-000002",
+      "customer": "Kiran Works",
+      "due_date": "2026-09-05",
+      "total": "7080.00",
+      "outstanding": "7080.00",
+      "days_overdue": 39
+    }
+  ],
+  "days_61_90": [
+    {
+      "id": 6,
+      "invoice_number": "INV-000006",
+      "customer": "Sample Traders",
+      "due_date": "2026-08-04",
+      "total": "8260.00",
+      "outstanding": "8260.00",
+      "days_overdue": 71
+    }
+  ],
+  "days_90_plus": [
+    {
+      "id": 7,
+      "invoice_number": "INV-000007",
+      "customer": "Bhagat & Sons",
+      "due_date": "2026-06-09",
+      "total": "14160.00",
+      "outstanding": "14160.00",
+      "days_overdue": 127
+    }
+  ]
+}
