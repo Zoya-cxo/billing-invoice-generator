@@ -64,6 +64,13 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class PaymentSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = ["id", "amount", "payment_date", "method"]
+        read_only_fields = fields
+
+
 class InvoiceSerializer(serializers.ModelSerializer):
     items = InvoiceItemSerializer(many=True)
     subtotal = serializers.DecimalField(
@@ -75,18 +82,36 @@ class InvoiceSerializer(serializers.ModelSerializer):
     total = serializers.DecimalField(
         max_digits=12, decimal_places=2, rounding=ROUND_HALF_UP, read_only=True
     )
+    paid = serializers.DecimalField(
+        max_digits=12, decimal_places=2, rounding=ROUND_HALF_UP,
+        read_only=True, source="amount_paid",
+    )
+    outstanding = serializers.DecimalField(
+        max_digits=12, decimal_places=2, rounding=ROUND_HALF_UP,
+        read_only=True, source="amount_outstanding",
+    )
+    payments = PaymentSummarySerializer(many=True, read_only=True)
 
     class Meta:
         model = Invoice
         fields = [
-            "id", "invoice_number", "customer", "status", "issue_date", "due_date",
-            "subtotal", "tax_total", "total", "irn", "qr_code", "items",
+            "id", "invoice_number", "customer",
+            "customer_name", "customer_gstin", "customer_state", "customer_billing_address",
+            "status",
+            "seller_name", "seller_gstin", "seller_state", "seller_address",
+            "issue_date", "due_date",
+            "subtotal", "tax_total", "total", "paid", "outstanding",
+            "irn", "qr_code", "items", "payments",
         ]
         # subtotal/tax_total/total are explicitly declared above (with rounding=),
         # so listing them here too has no effect - DRF only applies
         # Meta.read_only_fields to auto-generated fields. Left off to avoid
         # implying they do something they don't.
-        read_only_fields = ["invoice_number", "irn", "qr_code"]
+        read_only_fields = [
+            "invoice_number", "irn", "qr_code",
+            "customer_name", "customer_gstin", "customer_state", "customer_billing_address",
+            "seller_name", "seller_gstin", "seller_state", "seller_address",
+        ]
 
     def validate_items(self, value):
         if not value:

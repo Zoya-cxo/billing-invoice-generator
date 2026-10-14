@@ -1,6 +1,6 @@
 from datetime import date
 from decimal import Decimal
-from django.db.models import ProtectedError, Sum, DecimalField
+from django.db.models import DecimalField, Prefetch, ProtectedError, Sum
 from django.db.models.functions import Coalesce
 from rest_framework import viewsets, mixins, status
 from rest_framework.decorators import action
@@ -50,7 +50,14 @@ class InvoiceViewSet(mixins.CreateModelMixin,
                      mixins.RetrieveModelMixin,
                      mixins.UpdateModelMixin,
                      viewsets.GenericViewSet):
-    queryset = Invoice.objects.all().order_by('-issue_date')
+    queryset = (
+        Invoice.objects
+        .order_by('-issue_date', '-id')
+        .prefetch_related(
+            'items__product',
+            Prefetch('payments', queryset=Payment.objects.order_by('payment_date', 'id')),
+        )
+    )
     serializer_class = InvoiceSerializer
     permission_classes = [IsAuthenticated]
 
