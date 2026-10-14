@@ -230,13 +230,18 @@ class InvoicePaymentTotalsTests(InvoiceApiFixture):
                         self.assertEqual(payload.get("outstanding"), outstanding)
                         self.assertEqual(len(payload.get("payments", [None])), len(amounts))
 
-    def test_unsaved_invoice_outstanding_representation(self):
-        field = InvoiceSerializer().fields["outstanding"]
-        for total, expected in (("10.9500", "10.95"), ("10.9650", "10.97")):
-            with self.subTest(total=total):
-                invoice = Invoice(total=Decimal(total))
-                value = field.get_attribute(invoice)
-                self.assertEqual(field.to_representation(value), expected)
+    def test_money_fields_quantize_to_two_places_half_up(self):
+        fields = InvoiceSerializer().fields
+        for name in ("total", "paid", "outstanding"):
+            for raw, expected in (
+                ("10.9500", "10.95"),
+                ("10.9650", "10.97"),
+                ("0", "0.00"),
+            ):
+                with self.subTest(field=name, raw=raw):
+                    self.assertEqual(
+                        fields[name].to_representation(Decimal(raw)), expected
+                    )
 
     def test_list_outstanding_equals_aging_outstanding(self):
         today = date.today()
@@ -370,6 +375,15 @@ class InvoiceQueryCountTests(InvoiceApiFixture):
             f"Growing: {grown_queries(few, many)}",
         )
 
+    def test_list_uses_five_queries_count_invoices_items_products_payments(self):
+        self.build(3)
+        queries = self.capture(3)
+        self.assertEqual(
+            len(queries), 5,
+            f"expected 5 queries, got {len(queries)}:\n"
+            + "\n".join(shape(q) for q in queries),
+        )
+
 
 class InvoiceAnonymousAccessTests(InvoiceApiFixture):
     def test_anonymous_list_and_detail_return_401(self):
@@ -382,3 +396,50 @@ class InvoiceAnonymousAccessTests(InvoiceApiFixture):
         for url in urls:
             with self.subTest(url=url, authenticated=False):
                 self.assertEqual(self.client.get(url).status_code, 401)
+
+
+class InvoiceCreateResponseTests(InvoiceApiFixture):
+    def test_post_response_money_values(self):
+        product = Product.objects.create(
+            name="Plain Product",
+            unit_price=Decimal("10.95"),
+            default_tax_rate=Decimal("0.00"),
+            hsn_sac_code="998316",
+        )
+        payload = {
+            "customer": self.customer.id,
+            "issue_date": "2026-01-01",
+            "due_date": "2026-01-31",
+            "items": [{"product": product.id, "quantity": "1.00", "discount": "0"}],
+        }
+        response = self.client.post(LIST_URL, payload, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["total"], "10.95")
+        self.assertEqual(response.data["paid"], "0.00")
+        self.assertEqual(response.data["outstanding"], "10.95")
+        self.assertEqual(list(response.data["payments"]), [])
+
+
+class InvoiceEinvoiceFieldsTests(InvoiceApiFixture):
+    def test_irn_and_qr_code_are_null_when_not_generated(self):
+        invoice = self.make_invoice()
+        payload = {
+            "customer": self.customer.id,
+            "issue_date": "2026-01-01",
+            "due_date": "2026-01-31",
+            "items": [
+                {"product": self.product_a.id, "quantity": "1.00", "discount": "0"}
+            ],
+        }
+        created = self.client.post(LIST_URL, payload, format="json")
+        self.assertEqual(created.status_code, 201, created.data)
+        bodies = (
+            ("detail", self.get_detail(invoice)),
+            ("list", self.get_list_rows()[invoice.id]),
+            ("post", created.data),
+        )
+        for label, body in bodies:
+            for key in ("irn", "qr_code"):
+                with self.subTest(source=label, key=key):
+                    self.assertIn(key, body)
+                    self.assertIsNone(body[key])
