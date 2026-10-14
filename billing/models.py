@@ -205,6 +205,16 @@ class Invoice(models.Model):
     irn = models.CharField(max_length=100, null=True, blank=True)
     qr_code = models.TextField(null=True, blank=True)
 
+    @property
+    def amount_paid(self):
+        if self.pk is None:
+            return Decimal('0.00')
+        return sum((p.amount for p in self.payments.all()), Decimal('0.00'))
+
+    @property
+    def amount_outstanding(self):
+        return self.total - self.amount_paid
+
     def transition_to(self, new_status):
         allowed = self.ALLOWED_TRANSITIONS.get(self.status, set())
         if new_status not in allowed:
