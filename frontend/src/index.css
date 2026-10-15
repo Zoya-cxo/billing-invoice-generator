@@ -96,3 +96,255 @@ form button[type="submit"], form button[type="button"] { padding: 8px 16px; bord
 /* aging */
 .bucket__title { font-size: 16px; }
 .bucket__subtotal { text-align: right; font-weight: 700; margin: 8px 0 0; }
+
+.login-page {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #f4f5f7;
+  text-align: left;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+.login-brand {
+  background: #0f2a43;
+  color: #e6edf3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 64px;
+}
+.login-brand h1 {
+  margin: 0 0 8px;
+  font-size: 34px;
+  line-height: 1.15;
+  color: #ffffff;
+}
+.login-brand .login-tag {
+  margin: 0 0 40px;
+  color: #9fb3c8;
+  font-size: 16px;
+}
+.login-brand ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+}
+.login-brand li {
+  padding-left: 18px;
+  border-left: 3px solid #14b8a6;
+  color: #d5e0ea;
+  font-size: 15px;
+}
+.login-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  background: #ffffff;
+  border: 1px solid #e3e6ea;
+  border-radius: 12px;
+  padding: 36px 32px;
+  box-shadow: 0 8px 24px rgba(15, 42, 67, 0.08);
+}
+.login-card h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+  color: #0f2a43;
+}
+.login-card .login-sub {
+  margin: 0 0 24px;
+  color: #5b6b7b;
+  font-size: 14px;
+}
+.login-field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.login-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #33475b;
+}
+.login-field input {
+  padding: 10px 12px;
+  border: 1px solid #c9d1d9;
+  border-radius: 8px;
+  font-size: 15px;
+  color: #0f2a43;
+  background: #ffffff;
+}
+.login-field input:focus {
+  outline: 2px solid #14b8a6;
+  outline-offset: 1px;
+  border-color: #14b8a6;
+}
+.login-error {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  background: #fdecec;
+  border: 1px solid #f5c2c2;
+  border-radius: 8px;
+  color: #a12626;
+  font-size: 14px;
+}
+.login-button {
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #0f766e;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.login-button:hover {
+  background: #115e59;
+}
+.login-button:disabled {
+  background: #7aa9a5;
+  cursor: default;
+}
+@media (max-width: 800px) {
+  .login-page {
+    grid-template-columns: 1fr;
+  }
+  .login-brand {
+    display: none;
+  }
+}
+
+.app-main h1 {
+  font-size: 26px;
+  color: #0f2a43;
+  margin: 4px 0 20px;
+}
+.app-main h1 + form {
+  max-width: 680px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: 0 4px 16px rgba(15, 42, 67, 0.06);
+}
+.app-main h1 + form > div {
+  margin-bottom: 16px;
+}
+.app-main h1 + form label {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: #33475b;
+}
+.app-main h1 + form input,
+.app-main h1 + form select,
+.app-main h1 + form textarea {
+  max-width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+.app-main h1 + form textarea {
+  min-height: 96px;
+}
+.app-main h1 + form h2 {
+  margin: 28px 0 12px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  font-size: 16px;
+  color: #0f2a43;
+}
+.app-main h1 + form > div:has(> div) {
+  padding: 16px;
+  background: #f7f9fb;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.app-main h1 + form > div:has(> div) > div {
+  margin-bottom: 12px;
+}
+.app-main h1 + form p {
+  color: #a12626;
+  font-size: 13px;
+  margin: 6px 0 0;
+}
+.app-main h1 + form > div:has(> div) > p {
+  color: #5b6b7b;
+}
+.app-main h1 + form button:not(.btn) {
+  padding: 9px 16px;
+  border-radius: 8px;
+  border: 1px solid #c9d1d9;
+  background: #ffffff;
+  color: #0f2a43;
+  font-weight: 600;
+  cursor: pointer;
+}
+.app-main h1 + form button:not(.btn):hover:not(:disabled) {
+  background: #f1f4f7;
+}
+.app-main h1 + form button[type='submit'] {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #ffffff;
+  margin-top: 8px;
+}
+.app-main h1 + form button[type='submit']:hover:not(:disabled) {
+  background: #115e59;
+}
+.app-main h1 + form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.app-main h1 ~ ul {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.app-main h1 ~ ul > li {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.app-main h1 ~ ul > li:last-child {
+  border-bottom: 0;
+}
+.app-main h1 ~ ul > li:hover {
+  background: #f7f9fb;
+}
+.app-main h1 ~ ul li button {
+  margin-left: 6px;
+  padding: 4px 12px;
+  border: 1px solid #c9d1d9;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0f2a43;
+  font-weight: 600;
+  cursor: pointer;
+}
+.app-main h1 ~ ul li button:hover:not(:disabled) {
+  background: #fdecec;
+  border-color: #f5c2c2;
+  color: #a12626;
+}
+.app-main h1 ~ a {
+  display: inline-block;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: #0f766e;
+  color: #ffffff;
+  font-weight: 600;
+  text-decoration: none;
+}
+.app-main h1 ~ a:hover {
+  background: #115e59;
+}
