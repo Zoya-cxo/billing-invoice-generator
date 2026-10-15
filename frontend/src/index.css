@@ -348,3 +348,14 @@ form button[type="submit"], form button[type="button"] { padding: 8px 16px; bord
 .app-main h1 ~ a:hover {
   background: #115e59;
 }
+
+:root {
+  --accent: #0f766e;
+  --accent-dark: #115e59;
+  --accent-bg: rgba(15, 118, 110, 0.1);
+  --accent-border: rgba(15, 118, 110, 0.5);
+}
+.app-nav__link--active {
+  background: #e3f1ef;
+  color: #115e59;
+}
