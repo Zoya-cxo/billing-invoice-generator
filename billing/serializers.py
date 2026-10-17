@@ -216,6 +216,15 @@ class InvoiceSerializer(serializers.ModelSerializer):
                 self._create_items(instance, items_data)
                 self._recalculate_totals(instance)
 
+            if (
+                new_status == Invoice.STATUS_PAID
+                and new_status in Invoice.ALLOWED_TRANSITIONS.get(instance.status, set())
+                and instance.amount_outstanding != 0
+            ):
+                raise serializers.ValidationError(
+                    {"status": ["Cannot mark an invoice as paid while a balance is outstanding."]}
+                )
+
             if new_status is not None and new_status != instance.status:
                 try:
                     instance.transition_to(new_status)
