@@ -29,7 +29,8 @@ Show customer_name and the seller_* fields from the invoice itself, never from t
 PATCH /invoices/{id}/ {status} -> 200 Invoice | 400
 Status transitions: draft->sent|cancelled; sent->paid|overdue|cancelled;
   overdue->paid|cancelled; paid and cancelled are final.
-Rule (server guard pending, branch backend-step0b): status paid is only valid when outstanding is "0.00", otherwise 400. Until that branch merges the server wrongly accepts it, so the UI must offer Mark as paid only when outstanding === "0.00".
+Rule (enforced by the server since e1307a4): status paid is only valid when outstanding is "0.00", otherwise 400 with body {"status": ["Cannot mark an invoice as paid while a balance is outstanding."]}. The UI must still offer Mark as paid only when outstanding === "0.00".
+A paid request from draft is refused by the transition table before the balance check, so its body stays a list whose first entry is "Cannot transition invoice from draft to paid".
 
 ## Payments
 POST /payments/ {invoice, amount, payment_date, method, idempotency_key} -> 201 | 400
@@ -41,6 +42,7 @@ PUT, PATCH and DELETE on payments -> 405.
 ## Error bodies (handle every shape)
 400 can be a JSON list of strings, or an object keyed by field name whose values are a list of strings or a plain string, or an object with non_field_errors.
 - Invalid or forbidden status change: a list, for example ["Cannot transition invoice from paid to sent"].
+- Paid requested while a balance is outstanding: {"status": ["..."]}.
 - Items edited after draft: a list.
 - Customer changed after draft: {"customer": "..."}.
 - Payment rejected by validation: {"non_field_errors": ["..."]} or a field-keyed object.
