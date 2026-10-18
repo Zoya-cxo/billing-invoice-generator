@@ -9,6 +9,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
+from . import dates
 from .models import Company, Customer, Invoice, InvoiceItem, Payment, Product
 from .serializers import InvoiceSerializer
 
@@ -85,7 +86,7 @@ class InvoiceApiFixture(APITestCase):
     def make_invoice(self, items=(), send=True, total="1000.00",
                      issue_date=None, due_date=None, **overrides):
         self.counter += 1
-        today = date.today()
+        today = dates.business_today()
         fields = {
             "invoice_number": f"API-{self.counter:04d}",
             "customer": self.customer,
@@ -244,7 +245,7 @@ class InvoicePaymentTotalsTests(InvoiceApiFixture):
                     )
 
     def test_list_outstanding_equals_aging_outstanding(self):
-        today = date.today()
+        today = dates.business_today()
         unpaid = self.make_invoice(
             issue_date=today - timedelta(days=40), due_date=today - timedelta(days=10)
         )

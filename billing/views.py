@@ -1,4 +1,3 @@
-from datetime import date
 from decimal import Decimal
 from django.db.models import DecimalField, Prefetch, ProtectedError, Sum
 from django.db.models.functions import Coalesce
@@ -6,6 +5,7 @@ from rest_framework import viewsets, mixins, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from . import dates
 from .models import Customer, Product, Invoice, Payment
 from .serializers import (
     CustomerSerializer,
@@ -63,7 +63,7 @@ class InvoiceViewSet(mixins.CreateModelMixin,
 
     @action(detail=False, methods=['get'])
     def aging(self, request):
-        today = date.today()
+        today = dates.business_today()
         invoices = (
             Invoice.objects
             .exclude(status__in=[Invoice.STATUS_DRAFT, Invoice.STATUS_CANCELLED])

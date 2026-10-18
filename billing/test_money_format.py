@@ -1,7 +1,7 @@
 import re
 from datetime import timedelta
-from datetime import date
 
+from . import dates
 from .models import Invoice
 from .test_invoice_api import InvoiceApiFixture
 
@@ -50,7 +50,7 @@ class InvoiceMoneyFormatTests(InvoiceApiFixture):
                     self.assertRegex(row[field], TWO_DECIMALS)
 
     def test_aging_rows_emit_two_decimal_strings(self):
-        today = date.today()
+        today = dates.business_today()
         self.make_invoice(total="1000.00", due_date=today - timedelta(days=5))
         part = self.make_invoice(total="250.50", due_date=today - timedelta(days=40))
         self.add_payment(part, "0.50")

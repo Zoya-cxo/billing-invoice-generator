@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import timedelta
 from decimal import Decimal
 from io import StringIO
 
@@ -7,6 +7,7 @@ from django.core.management import call_command
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
+from . import dates
 from .aging_scenarios import SCENARIOS, EXCLUDED, due_date_for, payment_amount_for
 from .models import Company, Customer, Invoice, Payment, Product
 from .serializers import InvoiceSerializer
@@ -28,7 +29,7 @@ class AgingReportTests(APITestCase):
             billing_address="Test Address",
         )
 
-        self.today = date.today()
+        self.today = dates.business_today()
         self.invoices_by_name = {}
 
         for scenario in SCENARIOS:
@@ -194,7 +195,7 @@ class SeedAgingCleanTests(APITestCase):
         real_payment = Payment.objects.create(
             invoice=real_invoice,
             amount=Decimal("1.00"),
-            payment_date=date.today(),
+            payment_date=dates.business_today(),
             method=Payment.METHOD_CASH,
         )
 
