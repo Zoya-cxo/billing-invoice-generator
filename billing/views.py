@@ -93,7 +93,7 @@ class InvoiceViewSet(mixins.CreateModelMixin,
             row = {
                 'id': inv.id,
                 'invoice_number': inv.invoice_number,
-                'customer': inv.customer.name,
+                'customer': inv.customer_name,
                 'due_date': inv.due_date,
                 'total': str(inv.total),
                 'outstanding': str(outstanding),
