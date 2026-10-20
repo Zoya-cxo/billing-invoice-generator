@@ -1,11 +1,9 @@
-from decimal import Decimal
-from django.db.models import DecimalField, Prefetch, ProtectedError, Sum
-from django.db.models.functions import Coalesce
+from django.db.models import Prefetch, ProtectedError
 from rest_framework import viewsets, mixins, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from . import dates
+from . import receivables
 from .models import Customer, Product, Invoice, Payment
 from .serializers import (
     CustomerSerializer,
@@ -63,20 +61,6 @@ class InvoiceViewSet(mixins.CreateModelMixin,
 
     @action(detail=False, methods=['get'])
     def aging(self, request):
-        today = dates.business_today()
-        invoices = (
-            Invoice.objects
-            .exclude(status__in=[Invoice.STATUS_DRAFT, Invoice.STATUS_CANCELLED])
-            .select_related('customer')
-            .annotate(
-                paid=Coalesce(
-                    Sum('payments__amount'),
-                    Decimal('0'),
-                    output_field=DecimalField(max_digits=12, decimal_places=2),
-                )
-            )
-        )
-
         buckets = {
             'not_due': [],
             'days_0_30': [],
@@ -85,11 +69,7 @@ class InvoiceViewSet(mixins.CreateModelMixin,
             'days_90_plus': [],
         }
 
-        for inv in invoices:
-            outstanding = inv.total - inv.paid
-            if outstanding <= 0:
-                continue
-            days_overdue = (today - inv.due_date).days
+        for inv, outstanding, days_overdue in receivables.open_receivables():
             row = {
                 'id': inv.id,
                 'invoice_number': inv.invoice_number,
