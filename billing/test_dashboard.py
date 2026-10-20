@@ -4,6 +4,9 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
+from .models import Invoice
+from .test_invoice_api import InvoiceApiFixture
+
 
 class DashboardAnonymousTests(APITestCase):
     def test_anonymous_request_gets_401(self):
@@ -63,3 +66,16 @@ class DashboardEmptyDatabaseTests(APITestCase):
 
     def test_recent_invoices_is_an_empty_list(self):
         self.assertEqual(self.get_dashboard().get("recent_invoices"), [])
+
+
+class DashboardRevenueCollectedTests(InvoiceApiFixture):
+    def test_revenue_collected_includes_payments_on_cancelled_invoices(self):
+        kept = self.make_invoice()
+        cancelled = self.make_invoice()
+        self.add_payment(kept, '300.00')
+        self.add_payment(kept, '100.25')
+        self.add_payment(cancelled, '200.50')
+        cancelled.transition_to(Invoice.STATUS_CANCELLED)
+        response = self.client.get('/api/v1/dashboard/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['revenue_collected'], '600.75')

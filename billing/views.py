@@ -1,4 +1,6 @@
-from django.db.models import Prefetch, ProtectedError
+from decimal import Decimal, ROUND_HALF_UP
+
+from django.db.models import Prefetch, ProtectedError, Sum
 from rest_framework import viewsets, mixins, status
 from rest_framework.decorators import action
 from rest_framework.views import APIView
@@ -108,12 +110,14 @@ class DashboardView(APIView):
 
     def get(self, request):
         today = dates.business_today()
+        total_paid = Payment.objects.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        revenue_collected = total_paid.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         months = []
         for offset in range(5, -1, -1):
             year, month_index = divmod(today.year * 12 + today.month - 1 - offset, 12)
             months.append({'month': f'{year:04d}-{month_index + 1:02d}', 'revenue': '0.00'})
         return Response({
-            'revenue_collected': '0.00',
+            'revenue_collected': str(revenue_collected),
             'outstanding': '0.00',
             'overdue': '0.00',
             'invoice_counts': {status: 0 for status, _ in Invoice.STATUS_CHOICES},
