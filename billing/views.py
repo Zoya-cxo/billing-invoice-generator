@@ -4,7 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from . import receivables
+from . import dates, receivables
 from .models import Customer, Product, Invoice, Payment
 from .serializers import (
     CustomerSerializer,
@@ -107,4 +107,16 @@ class DashboardView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response({})
+        today = dates.business_today()
+        months = []
+        for offset in range(5, -1, -1):
+            year, month_index = divmod(today.year * 12 + today.month - 1 - offset, 12)
+            months.append({'month': f'{year:04d}-{month_index + 1:02d}', 'revenue': '0.00'})
+        return Response({
+            'revenue_collected': '0.00',
+            'outstanding': '0.00',
+            'overdue': '0.00',
+            'invoice_counts': {status: 0 for status, _ in Invoice.STATUS_CHOICES},
+            'monthly_revenue': months,
+            'recent_invoices': [],
+        })
