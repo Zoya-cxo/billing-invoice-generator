@@ -18,7 +18,7 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from billing.views import CustomerViewSet, ProductViewSet, InvoiceViewSet, PaymentViewSet
+from billing.views import CustomerViewSet, ProductViewSet, InvoiceViewSet, PaymentViewSet, DashboardView
 
 router = DefaultRouter()
 router.register(r"customers", CustomerViewSet, basename="customer")
@@ -30,5 +30,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/v1/dashboard/', DashboardView.as_view(), name='dashboard'),
     path('api/v1/', include(router.urls)),
 ]

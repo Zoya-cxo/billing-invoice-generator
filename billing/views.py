@@ -1,6 +1,7 @@
 from django.db.models import Prefetch, ProtectedError
 from rest_framework import viewsets, mixins, status
 from rest_framework.decorators import action
+from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from . import receivables
@@ -100,3 +101,10 @@ class PaymentViewSet(mixins.CreateModelMixin,
     queryset = Payment.objects.all().order_by("-payment_date")
     serializer_class = PaymentSerializer
     permission_classes = [IsAuthenticated]
+
+
+class DashboardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({})
