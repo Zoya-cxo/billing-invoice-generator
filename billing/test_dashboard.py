@@ -79,3 +79,22 @@ class DashboardRevenueCollectedTests(InvoiceApiFixture):
         response = self.client.get('/api/v1/dashboard/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['revenue_collected'], '600.75')
+
+
+class DashboardInvoiceCountsTests(InvoiceApiFixture):
+    def test_invoice_counts_match_the_number_of_invoices_per_status(self):
+        wanted = {
+            Invoice.STATUS_DRAFT: 1,
+            Invoice.STATUS_SENT: 2,
+            Invoice.STATUS_OVERDUE: 3,
+            Invoice.STATUS_PAID: 4,
+            Invoice.STATUS_CANCELLED: 5,
+        }
+        for status, how_many in wanted.items():
+            for _ in range(how_many):
+                invoice = self.make_invoice(send=status != Invoice.STATUS_DRAFT)
+                if status in (Invoice.STATUS_OVERDUE, Invoice.STATUS_PAID, Invoice.STATUS_CANCELLED):
+                    invoice.transition_to(status)
+        response = self.client.get('/api/v1/dashboard/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['invoice_counts'], wanted)
