@@ -133,11 +133,22 @@ class DashboardView(APIView):
         rows = receivables.open_receivables()
         outstanding = sum((row[1] for row in rows), Decimal('0'))
         overdue = sum((row[1] for row in rows if row[2] > 0), Decimal('0'))
+        recent_invoices = [
+            {
+                'id': inv.id,
+                'invoice_number': inv.invoice_number,
+                'customer': inv.customer_name,
+                'total': str(inv.total),
+                'status': inv.status,
+                'issue_date': inv.issue_date,
+            }
+            for inv in Invoice.objects.order_by('-issue_date', '-id')[:10]
+        ]
         return Response({
             'revenue_collected': str(revenue_collected),
             'outstanding': str(outstanding.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
             'overdue': str(overdue.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
             'invoice_counts': {status: counts.get(status, 0) for status, _ in Invoice.STATUS_CHOICES},
             'monthly_revenue': months,
-            'recent_invoices': [],
+            'recent_invoices': recent_invoices,
         })

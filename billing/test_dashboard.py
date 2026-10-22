@@ -200,3 +200,53 @@ class DashboardMonthlyRevenueTests(InvoiceApiFixture):
                 ('2030-01', '8.00'),
                 ('2030-02', '16.00'),
             ])
+
+
+class DashboardRecentInvoicesTests(InvoiceApiFixture):
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch('billing.dates.business_today', return_value=FIXED_TODAY)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def get_recent(self):
+        response = self.client.get('/api/v1/dashboard/')
+        self.assertEqual(response.status_code, 200)
+        return response.json()['recent_invoices']
+
+    def test_ten_rows_ordered_by_issue_date_then_id_both_descending(self):
+        self.make_invoice(issue_date=date(2030, 6, 15))
+        for _ in range(11):
+            self.make_invoice(issue_date=date(2030, 6, 10))
+        self.make_invoice(issue_date=date(2030, 6, 1))
+        self.assertEqual(
+            [row['invoice_number'] for row in self.get_recent()],
+            [
+                'API-0001', 'API-0012', 'API-0011', 'API-0010', 'API-0009',
+                'API-0008', 'API-0007', 'API-0006', 'API-0005', 'API-0004',
+            ],
+        )
+
+    def test_row_has_exact_keys_values_and_types_with_snapshot_customer(self):
+        invoice = self.make_invoice(
+            total='1234.50',
+            issue_date=date(2030, 6, 12),
+            customer_name='Billed To Name',
+        )
+        self.assertEqual(self.get_recent(), [{
+            'id': invoice.id,
+            'invoice_number': 'API-0001',
+            'customer': 'Billed To Name',
+            'total': '1234.50',
+            'status': 'sent',
+            'issue_date': '2030-06-12',
+        }])
+
+    def test_draft_and_cancelled_invoices_appear_with_their_status(self):
+        self.make_invoice(send=False, issue_date=date(2030, 6, 14))
+        cancelled = self.make_invoice(issue_date=date(2030, 6, 13))
+        cancelled.transition_to(Invoice.STATUS_CANCELLED)
+        self.assertEqual(
+            [(row['invoice_number'], row['status']) for row in self.get_recent()],
+            [('API-0001', 'draft'), ('API-0002', 'cancelled')],
+        )
