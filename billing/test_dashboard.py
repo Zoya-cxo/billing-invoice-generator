@@ -98,3 +98,33 @@ class DashboardInvoiceCountsTests(InvoiceApiFixture):
         response = self.client.get('/api/v1/dashboard/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['invoice_counts'], wanted)
+
+
+class DashboardOutstandingOverdueTests(InvoiceApiFixture):
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch('billing.dates.business_today', return_value=FIXED_TODAY)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.make_invoice(total='1000.00', due_date=date(2030, 6, 15))
+        self.make_invoice(total='500.00', due_date=date(2030, 6, 14))
+        part_paid = self.make_invoice(total='400.00', due_date=date(2030, 5, 16))
+        self.add_payment(part_paid, '150.25')
+        flagged = self.make_invoice(total='300.00', due_date=date(2030, 5, 15))
+        flagged.transition_to(Invoice.STATUS_OVERDUE)
+        fully_paid = self.make_invoice(total='700.00', due_date=date(2030, 4, 1))
+        self.add_payment(fully_paid, '700.00')
+        self.make_invoice(total='900.00', due_date=date(2030, 7, 15), send=False)
+        cancelled = self.make_invoice(total='800.00', due_date=date(2030, 5, 6))
+        cancelled.transition_to(Invoice.STATUS_CANCELLED)
+
+    def get_dashboard(self):
+        response = self.client.get('/api/v1/dashboard/')
+        self.assertEqual(response.status_code, 200)
+        return response.data
+
+    def test_outstanding_is_the_unpaid_balance_of_issued_invoices_only(self):
+        self.assertEqual(self.get_dashboard()['outstanding'], '2049.75')
+
+    def test_overdue_is_the_part_of_outstanding_past_its_due_date(self):
+        self.assertEqual(self.get_dashboard()['overdue'], '1049.75')

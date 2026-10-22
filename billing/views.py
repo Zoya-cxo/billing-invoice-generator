@@ -117,10 +117,13 @@ class DashboardView(APIView):
         for offset in range(5, -1, -1):
             year, month_index = divmod(today.year * 12 + today.month - 1 - offset, 12)
             months.append({'month': f'{year:04d}-{month_index + 1:02d}', 'revenue': '0.00'})
+        rows = receivables.open_receivables()
+        outstanding = sum((row[1] for row in rows), Decimal('0'))
+        overdue = sum((row[1] for row in rows if row[2] > 0), Decimal('0'))
         return Response({
             'revenue_collected': str(revenue_collected),
-            'outstanding': '0.00',
-            'overdue': '0.00',
+            'outstanding': str(outstanding.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'overdue': str(overdue.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
             'invoice_counts': {status: counts.get(status, 0) for status, _ in Invoice.STATUS_CHOICES},
             'monthly_revenue': months,
             'recent_invoices': [],
