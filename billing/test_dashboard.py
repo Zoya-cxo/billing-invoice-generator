@@ -143,3 +143,60 @@ class DashboardOutstandingOverdueTests(InvoiceApiFixture):
 
         self.assertEqual(dashboard['outstanding'], str(bucket_total(['not_due'] + overdue_keys)))
         self.assertEqual(dashboard['overdue'], str(bucket_total(overdue_keys)))
+
+
+class DashboardMonthlyRevenueTests(InvoiceApiFixture):
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch('billing.dates.business_today', return_value=FIXED_TODAY)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.invoice = self.make_invoice(total='100000.00')
+
+    def add_payments(self, rows):
+        for payment_date, amount in rows:
+            self.add_payment(self.invoice, amount, payment_date)
+
+    def get_months(self):
+        response = self.client.get('/api/v1/dashboard/')
+        self.assertEqual(response.status_code, 200)
+        return [(m['month'], m['revenue']) for m in response.data['monthly_revenue']]
+
+    def test_months_sum_payments_by_calendar_month_within_the_window(self):
+        self.add_payments([
+            ('2029-12-31', '1.00'),
+            ('2030-01-01', '10.00'),
+            ('2030-01-31', '20.00'),
+            ('2030-03-10', '5.50'),
+            ('2030-03-11', '0.25'),
+            ('2030-06-30', '7.25'),
+            ('2030-07-01', '100.00'),
+        ])
+        self.add_payment(self.invoice, '3.00')
+        self.assertEqual(self.get_months(), [
+            ('2030-01', '30.00'),
+            ('2030-02', '0.00'),
+            ('2030-03', '5.75'),
+            ('2030-04', '0.00'),
+            ('2030-05', '0.00'),
+            ('2030-06', '7.25'),
+        ])
+
+    def test_window_crosses_the_year_boundary(self):
+        with mock.patch('billing.dates.business_today', return_value=date(2030, 2, 10)):
+            self.add_payments([
+                ('2029-08-31', '1.00'),
+                ('2029-09-01', '2.00'),
+                ('2029-12-31', '4.00'),
+                ('2030-01-01', '8.00'),
+                ('2030-02-28', '16.00'),
+                ('2030-03-01', '32.00'),
+            ])
+            self.assertEqual(self.get_months(), [
+                ('2029-09', '2.00'),
+                ('2029-10', '0.00'),
+                ('2029-11', '0.00'),
+                ('2029-12', '4.00'),
+                ('2030-01', '8.00'),
+                ('2030-02', '16.00'),
+            ])

@@ -117,6 +117,19 @@ class DashboardView(APIView):
         for offset in range(5, -1, -1):
             year, month_index = divmod(today.year * 12 + today.month - 1 - offset, 12)
             months.append({'month': f'{year:04d}-{month_index + 1:02d}', 'revenue': '0.00'})
+        window_start = f"{months[0]['month']}-01"
+        next_year, next_index = divmod(today.year * 12 + today.month, 12)
+        window_end = f'{next_year:04d}-{next_index + 1:02d}-01'
+        monthly_totals = {}
+        window_payments = Payment.objects.filter(
+            payment_date__gte=window_start, payment_date__lt=window_end
+        ).values_list('payment_date', 'amount')
+        for payment_date, amount in window_payments:
+            key = f'{payment_date.year:04d}-{payment_date.month:02d}'
+            monthly_totals[key] = monthly_totals.get(key, Decimal('0')) + amount
+        for entry in months:
+            month_total = monthly_totals.get(entry['month'], Decimal('0'))
+            entry['revenue'] = str(month_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
         rows = receivables.open_receivables()
         outstanding = sum((row[1] for row in rows), Decimal('0'))
         overdue = sum((row[1] for row in rows if row[2] > 0), Decimal('0'))
