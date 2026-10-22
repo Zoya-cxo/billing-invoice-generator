@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -128,3 +129,17 @@ class DashboardOutstandingOverdueTests(InvoiceApiFixture):
 
     def test_overdue_is_the_part_of_outstanding_past_its_due_date(self):
         self.assertEqual(self.get_dashboard()['overdue'], '1049.75')
+
+    def test_dashboard_figures_equal_the_sums_of_the_aging_buckets(self):
+        aging = self.client.get('/api/v1/invoices/aging/').data
+        dashboard = self.get_dashboard()
+        overdue_keys = ['days_0_30', 'days_31_60', 'days_61_90', 'days_90_plus']
+
+        def bucket_total(keys):
+            return sum(
+                (Decimal(row['outstanding']) for key in keys for row in aging[key]),
+                Decimal('0'),
+            )
+
+        self.assertEqual(dashboard['outstanding'], str(bucket_total(['not_due'] + overdue_keys)))
+        self.assertEqual(dashboard['overdue'], str(bucket_total(overdue_keys)))
