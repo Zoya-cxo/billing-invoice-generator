@@ -12,7 +12,6 @@ def open_receivables():
     invoices = (
         Invoice.objects
         .exclude(status__in=[Invoice.STATUS_DRAFT, Invoice.STATUS_CANCELLED])
-        .select_related('customer')
         .annotate(
             paid=Coalesce(
                 Sum('payments__amount'),
