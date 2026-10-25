@@ -52,7 +52,22 @@ A client must normalise all of these to text. Never assume an object.
 ## Aging
 GET /invoices/aging/ -> { not_due, days_0_30, days_31_60, days_61_90, days_90_plus }
 Each is a list of { id, invoice_number, customer, due_date, total, outstanding, days_overdue }.
-customer is the customer name string. days_overdue is 0 for not_due.
+customer is the customer_name snapshot stored on the invoice, not the live customer record. days_overdue is 0 for not_due.
+
+## Dashboard
+GET /dashboard/ -> 200 | 401 (anonymous)
+{
+  revenue_collected, outstanding, overdue,
+  invoice_counts: { draft, sent, paid, overdue, cancelled },
+  monthly_revenue: [{ month, revenue }],
+  recent_invoices: [{ id, invoice_number, customer, total, status, issue_date }]
+}
+revenue_collected, outstanding, overdue, every monthly_revenue revenue and every recent_invoices total are money strings with two decimals. invoice_counts values are integers, not strings, and all five statuses are always present (0 when none).
+revenue_collected is the sum of every payment ever recorded, whatever the date and whatever the invoice status now is. Payments on an invoice that was cancelled afterwards still count.
+outstanding is the sum of the outstanding balances of the invoices that the aging report lists, so it equals the sum of the outstanding fields across all five aging buckets. overdue is the part of that with a due date before today, so it equals the sum over the four overdue buckets. Draft and cancelled invoices and invoices with nothing outstanding are excluded from both.
+monthly_revenue has exactly six entries, oldest first, the last one being the current month. month is "YYYY-MM"; revenue is the sum of payments whose payment_date falls in that calendar month, and "0.00" when there are none. It is a six-month window, not a split of revenue_collected: payments dated before the window or after the current month are in revenue_collected and in no month.
+recent_invoices holds at most ten rows, ordered by issue_date descending, ties by id descending. Every status is included, drafts and cancelled invoices too. customer is the customer_name snapshot on the invoice. issue_date is entered by the user, so a back-dated invoice sorts by that date, and an invoice dated in the future sorts first.
+Today means the calendar date in Asia/Kolkata.
 
 ## Button rules for the invoice detail page
 Mark as sent: status draft. Mark as overdue: status sent. Cancel: draft, sent or overdue.
@@ -63,6 +78,9 @@ Record payment: status sent or overdue and outstanding !== "0.00".
 - The key days_0_30 holds invoices 1-30 days overdue.
 - A duplicate idempotency key that races past validation still returns 500. Parked until after the demo.
 - Invoice status is changed manually; a sent invoice past its due date stays sent until someone marks it overdue.
+- The dashboard reads the current date twice per request: once for the monthly_revenue window and once inside the receivables calculation behind outstanding and overdue. A request that straddles midnight in Asia/Kolkata can return a monthly window for one date and outstanding and overdue for the next.
+- Payments are not blocked from carrying a future date and revenue_collected is not clamped. A payment dated later in the current month is in revenue_collected and in the current month's entry; one dated after the current month is in revenue_collected and in no monthly_revenue entry.
+- Cancelling an invoice that has payments does not reduce revenue_collected (no credit notes or refunds exist).
 
 ## Verification log
 - Status transitions match Invoice.ALLOWED_TRANSITIONS in models.py (checked at 68e5ced).
@@ -71,3 +89,6 @@ Record payment: status sent or overdue and outstanding !== "0.00".
 - Nested payments (4 keys) and invoice list ordering are covered by billing/test_invoice_api.py.
 - NOT verified: the 201 body of POST /payments/. The PaymentForm owner reports the real body.
 - Summing money in the browser: parse to integer paise (BigInt), never Number or parseFloat, then format with formatMoney.
+- Dashboard keys, row shapes, ordering and limits match DashboardView in views.py and are covered by billing/test_dashboard.py; money string format is covered by billing/test_money_format.py (checked at c0b4fe6).
+- Dashboard outstanding and overdue equal the aging bucket sums: one test in billing/test_dashboard.py.
+- NOT verified by a test: dashboard query count, an invoice dated after today, a payment dated after the current month, a request that straddles midnight in Asia/Kolkata. The rules stated above for these follow from the code only.
