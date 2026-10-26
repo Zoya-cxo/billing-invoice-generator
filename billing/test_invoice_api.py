@@ -345,6 +345,20 @@ class InvoiceListOrderingTests(InvoiceApiFixture):
         )
         self.assertEqual([r["id"] for r in response.data["results"]], expected)
 
+    def test_list_orders_by_issue_date_descending_even_when_id_order_disagrees(self):
+        first = self.make_invoice(issue_date=date(2026, 3, 5))
+        second = self.make_invoice(issue_date=date(2026, 3, 9))
+        third = self.make_invoice(issue_date=date(2026, 3, 1))
+        fourth = self.make_invoice(issue_date=date(2026, 3, 5))
+        fifth = self.make_invoice(issue_date=date(2026, 3, 9))
+
+        response = self.client.get(LIST_URL)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [r["id"] for r in response.data["results"]],
+            [fifth.id, second.id, fourth.id, first.id, third.id],
+        )
+
 
 class InvoiceQueryCountTests(InvoiceApiFixture):
     def build(self, count):
